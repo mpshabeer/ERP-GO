@@ -1,0 +1,19 @@
+﻿@using ERPGoEdition.Shared.Pages
+@inject ITabService TabService
+
+<MudNavMenu>
+    <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" OnClick="@(() => OpenTab("Dashboard", typeof(Home)))">Dashboard</MudNavLink>
+    <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Add" OnClick="@(() => OpenTab("Counter", typeof(Counter)))">Counter</MudNavLink>
+    <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Cloud" OnClick="@(() => OpenTab("Weather", typeof(Weather)))">Weather</MudNavLink>
+</MudNavMenu>
+
+@code {
+    void OpenTab(string title, Type componentType)
+    {
+        TabService.AddTab(title, builder => {
+            builder.OpenComponent(0, componentType);
+            builder.CloseComponent();
+        });
+    }
+}
+

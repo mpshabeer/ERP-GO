@@ -1,0 +1,161 @@
+﻿@inherits LayoutComponentBase
+@inject ITabService TabService
+@inject IJSRuntime JSRuntime
+@using ERPGoEdition.Shared.Pages
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudText Typo="Typo.h5" Class="ml-3">ERP Go Edition</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@(isFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" 
+                       Color="Color.Inherit" 
+                       OnClick="ToggleFullscreen"
+                       Title="@(isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen")" />
+        <MudIconButton Icon="@Icons.Material.Filled.Person" Color="Color.Inherit" />
+    </MudAppBar>
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        @if (TabService.Tabs.Any())
+        {
+             <MudTabs @bind-ActivePanelIndex="UserActiveIndex" 
+                      KeepPanelsAlive="true" 
+                      Class="erp-tabs"
+                      Position="Position.Top"
+                      PanelClass="erp-tab-content">
+                @foreach (var tab in TabService.Tabs)
+                {
+                    <MudTabPanel ID="@tab.Id">
+                        <TabWrapperContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                                <MudText Typo="Typo.body2">@tab.Title</MudText>
+                                @if (tab.IsClosable)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                                                   Size="Size.Small" 
+                                                   OnClick="@(() => CloseTabById(tab.Id))" />
+                                }
+                            </MudStack>
+                        </TabWrapperContent>
+                        <ChildContent>
+                            @tab.Content
+                        </ChildContent>
+                    </MudTabPanel>
+                }
+            </MudTabs>
+        }
+        else
+        {
+             <div class="px-4 py-6">
+                <MudAlert Severity="Severity.Info">Select an item from the menu to open a tab.</MudAlert>
+                @Body
+             </div>
+        }
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    bool _drawerOpen = true;
+    bool isFullscreen = false;
+
+    void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    async Task ToggleFullscreen()
+    {
+        try
+        {
+            isFullscreen = await JSRuntime.InvokeAsync<bool>("fullscreenHelper.toggleFullscreen");
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Fullscreen API might not be available (e.g., in some contexts)
+            // Silently fail
+        }
+    }
+    
+    int userActiveIndex;
+    
+    // Sync property for binding
+    int UserActiveIndex
+    {
+        get => userActiveIndex;
+        set
+        {
+            if (userActiveIndex != value)
+            {
+                userActiveIndex = value;
+                OnActivePanelIndexChanged(value);
+            }
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        TabService.OnChange += HandleTabChange;
+        if (!TabService.Tabs.Any())
+        {
+             // Add dashboard but don't force a StateHasChanged yet as we are initializing
+            TabService.AddTab("Dashboard", builder =>
+            {
+                builder.OpenComponent(0, typeof(Home));
+                builder.CloseComponent();
+            }, isClosable: false);
+        }
+        UpdateActiveIndexFromService();
+    }
+    
+    public void Dispose()
+    {
+        TabService.OnChange -= HandleTabChange;
+    }
+
+    private void HandleTabChange()
+    {
+        UpdateActiveIndexFromService();
+        InvokeAsync(StateHasChanged);
+    }
+    
+    void UpdateActiveIndexFromService()
+    {
+        var activeTab = TabService.Tabs.FirstOrDefault(t => t.IsActive);
+        if (activeTab != null)
+        {
+            userActiveIndex = TabService.Tabs.IndexOf(activeTab);
+        }
+        else
+        {
+            userActiveIndex = 0;
+        }
+    }
+
+    void OnActivePanelIndexChanged(int index)
+    {
+        if (index >= 0 && index < TabService.Tabs.Count)
+        {
+             var tab = TabService.Tabs[index];
+             // Only activate if different to avoid loops
+             if (!tab.IsActive)
+             {
+                 TabService.ActivateTab(tab.Id);
+             }
+        }
+    }
+
+    void CloseTabById(string id)
+    {
+        TabService.CloseTab(id);
+    }
+}
