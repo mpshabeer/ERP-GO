@@ -1,0 +1,33 @@
+
+@using ERPGODomain.Entities
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField T="string" Label="Code (Symbol)" @bind-Value="Unit.Code" Required="true" RequiredError="Code is required." />
+        <MudTextField T="string" Label="Unit Name" @bind-Value="Unit.Name" Required="true" RequiredError="Name is required." />
+        <MudNumericField T="int" Label="Decimal Places" @bind-Value="Unit.DecimalPlaces" Min="0" Max="4" />
+        <MudCheckBox T="bool" Label="Active" @bind-Value="Unit.IsActive" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@((Unit.Id == 0) ? "Save" : "Update")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudBlazor.MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public Unit Unit { get; set; } = new Unit();
+
+    void Submit()
+    {
+        if (string.IsNullOrWhiteSpace(Unit.Name) || string.IsNullOrWhiteSpace(Unit.Code))
+        {
+            return; 
+        }
+        MudDialog.Close(DialogResult.Ok(Unit));
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}

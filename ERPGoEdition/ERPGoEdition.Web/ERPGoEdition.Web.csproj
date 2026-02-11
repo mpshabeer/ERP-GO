@@ -8,10 +8,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ERPGoEdition.Shared\ERPGoEdition.Shared.csproj" />
+    <ProjectReference Include="..\..\ERPGOINFRASTRUCTURE\ERPGOInfrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MudBlazor" Version="8.15.0" />
+    <PackageReference Include="MudBlazor" Version="7.15.0" />
+    <PackageReference Include="Refit.HttpClientFactory" Version="9.0.2" />
   </ItemGroup>
 
 </Project>

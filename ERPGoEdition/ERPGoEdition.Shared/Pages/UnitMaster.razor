@@ -1,0 +1,198 @@
+
+@page "/unit-master"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@inject IUnitService UnitService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" GutterBottom="true">Unit Master</MudText>
+
+<MudGrid>
+    <!-- Form Section -->
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="25">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">@((currentUnit.Id == 0) ? "Add New Unit" : "Edit Unit")</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudTextField T="string" Label="Unit Code (Symbol)" @bind-Value="currentUnit.Code" Required="true" RequiredError="Code is required." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+                    <MudTextField T="string" Label="Unit Name" @bind-Value="currentUnit.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-4" Immediate="true" />
+                    <MudNumericField T="int" Label="Decimal Places" @bind-Value="currentUnit.DecimalPlaces" Min="0" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-4" Immediate="true" />
+                    <MudCheckBox T="bool" Label="Active" @bind-Value="currentUnit.IsActive" Color="Color.Primary" Class="mt-2" />
+                </MudForm>
+            </MudCardContent>
+            <MudCardActions>
+                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await Save())" ButtonType="ButtonType.Button" Disabled="@_isProcessing" Class="ml-2">
+                     @if (_isProcessing)
+                     {
+                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                         <MudText Class="ms-2">Processing</MudText>
+                     }
+                     else
+                     {
+                         <MudText>@((currentUnit.Id == 0) ? "Save" : "Update")</MudText>
+                     }
+                 </MudButton>
+                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="Reset" Class="ml-2">Reset</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+
+    <!-- Grid Section -->
+    <MudItem xs="12" md="8">
+        <MudCard Elevation="25">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Units List</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                 </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTable Items="@Units" Hover="true" Striped="true" Bordered="true" Dense="true" Filter="new Func<Unit,bool>(FilterFunc)" OnRowClick="@(args => Edit(args.Item))" T="Unit">
+                    <HeaderContent>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Decimals</MudTh>
+                        <MudTh>Active</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Code">@context.Code</MudTd>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Decimals">@context.DecimalPlaces</MudTd>
+                        <MudTd DataLabel="Active">
+                            <MudIcon Icon="@(context.IsActive ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" />
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<Unit> Units = new List<Unit>();
+    private Unit currentUnit = new Unit();
+    private string searchString = "";
+    private bool success;
+    private MudForm form;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadUnits();
+            currentUnit.IsActive = true; // Default to active
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in OnInitializedAsync: {ex}");
+            Snackbar.Add($"Failed to load units: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadUnits()
+    {
+        Units = await UnitService.GetAllUnitsAsync();
+    }
+
+    private bool _isProcessing = false;
+
+    private async Task Save()
+    {
+        Console.WriteLine("Save method called"); // Debug log
+
+        if (form == null)
+        {
+             Snackbar.Add("Form reference is missing!", Severity.Error);
+             return;
+        }
+
+        await form.Validate();
+        
+        if (!form.IsValid) 
+        {
+             Snackbar.Add("Please fill required fields", Severity.Warning);
+             return;
+        }
+
+        _isProcessing = true;
+        await Task.Delay(1); // Force UI refresh
+        StateHasChanged();
+
+        try
+        {
+            if (currentUnit.Id == 0)
+            {
+                await UnitService.AddUnitAsync(currentUnit);
+                Snackbar.Add("Unit saved successfully", Severity.Success);
+            }
+            else
+            {
+                await UnitService.UpdateUnitAsync(currentUnit);
+                Snackbar.Add("Unit updated successfully", Severity.Success);
+            }
+            
+            await LoadUnits();
+            Reset();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in Save: {ex}");
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Edit(Unit unit)
+    {
+        // Clone to avoid modifying the list directly before saving
+        currentUnit = new Unit 
+        { 
+            Id = unit.Id, 
+            Name = unit.Name, 
+            Code = unit.Code, 
+            DecimalPlaces = unit.DecimalPlaces, 
+            IsActive = unit.IsActive 
+        };
+        StateHasChanged(); // Ensure UI updates
+    }
+
+    private async Task Delete(int id)
+    {
+        await UnitService.DeleteUnitAsync(id);
+        await LoadUnits();
+        Snackbar.Add("Unit deleted", Severity.Success);
+         if (currentUnit.Id == id) Reset();
+    }
+
+    private void Reset()
+    {
+        currentUnit = new Unit { IsActive = true };
+        form.ResetValidation();
+        StateHasChanged();
+    }
+
+    private bool FilterFunc(Unit unit)
+    {
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (unit.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (unit.Code?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+}

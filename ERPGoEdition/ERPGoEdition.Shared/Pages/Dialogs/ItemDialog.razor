@@ -1,0 +1,196 @@
+@using ERPGODomain.Entities
+@using ERPGOAPPLICATION.Interfaces
+@using MudBlazor
+@inject IUnitService UnitService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTabs Bounded="true">
+            <!-- General Info Tab -->
+            <MudTabPanel Text="General Info">
+                <MudGrid Class="mt-2">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Item Name" @bind-Value="Item.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Item Code" @bind-Value="Item.ItemCode" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" Label="Barcode" @bind-Value="Item.Barcode" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="int" Label="Base Unit" @bind-Value="Item.UnitId" Required="true" RequiredError="Base Unit is required." Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @foreach (var unit in Units)
+                            {
+                                <MudSelectItem Value="@unit.Id">@unit.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="decimal" Label="Selling Rate (Base)" @bind-Value="Item.Rate" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="decimal" Label="Purchase Rate" @bind-Value="Item.PurchaseRate" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="decimal" Label="Wholesale Rate" @bind-Value="Item.WholesaleRate" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" Label="Multi-Unit Item" @bind-Value="Item.IsMultiUnit" Color="Color.Primary" />
+                        <MudCheckBox T="bool" Label="Active" @bind-Value="Item.IsActive" Color="Color.Success" />
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <!-- Multi-Unit Tab -->
+            <MudTabPanel Text="Multi-Units" Disabled="!Item.IsMultiUnit">
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddUnitRow" Class="mt-2 mb-2">Add Unit</MudButton>
+                
+                <MudTable Items="@Item.ItemUnits" Hover="true" Dense="true" Bordered="true" Striped="true" CanCancelEdit="true" 
+                          @bind-SelectedItem="selectedItemUnit" CommitEditTooltip="Commit Edit" RowEditPreview="BackupItem" RowEditCancel="ResetItemToOriginalValues">
+                    <HeaderContent>
+                        <MudTh>Unit</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Barcode</MudTh>
+                        <MudTh>Qty (Base)</MudTh>
+                        <MudTh>Rate</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Unit">
+                            @{
+                                var u = Units.FirstOrDefault(x => x.Id == context.UnitId);
+                                <MudText>@(u?.Name ?? "Select Unit")</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Barcode">@context.Barcode</MudTd>
+                        <MudTd DataLabel="Qty (Base)">@context.QtyPerBaseUnit</MudTd>
+                        <MudTd DataLabel="Rate">@context.Rate</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => RemoveUnitRow(context))" Size="Size.Small" Color="Color.Error" />
+                        </MudTd>
+                    </RowTemplate>
+                    <RowEditingTemplate>
+                        <MudTd DataLabel="Unit">
+                            <MudSelect T="int" @bind-Value="context.UnitId" Margin="Margin.Dense" SelectedValuesChanged="@((IEnumerable<int> values) => OnUnitSelected(context, values))">
+                                @foreach (var unit in Units)
+                                {
+                                    <MudSelectItem Value="@unit.Id">@unit.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd DataLabel="Name">
+                            <MudTextField @bind-Value="context.Name" Margin="Margin.Dense" />
+                        </MudTd>
+                        <MudTd DataLabel="Barcode">
+                            <MudTextField @bind-Value="context.Barcode" Margin="Margin.Dense" />
+                        </MudTd>
+                        <MudTd DataLabel="Qty (Base)">
+                            <MudNumericField @bind-Value="context.QtyPerBaseUnit" Margin="Margin.Dense" />
+                        </MudTd>
+                        <MudTd DataLabel="Rate">
+                            <MudNumericField @bind-Value="context.Rate" Margin="Margin.Dense" />
+                        </MudTd>
+                    </RowEditingTemplate>
+                </MudTable>
+            </MudTabPanel>
+        </MudTabs>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public Item Item { get; set; } = new Item();
+    
+    private List<Unit> Units = new List<Unit>();
+    private ItemUnit selectedItemUnit;
+    private ItemUnit elementBeforeEdit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Units = await UnitService.GetAllUnitsAsync();
+        // Ensure collection is not null
+        if (Item.ItemUnits == null) Item.ItemUnits = new List<ItemUnit>();
+    }
+
+    private void AddUnitRow()
+    {
+        Item.ItemUnits.Add(new ItemUnit { ItemId = Item.Id });
+    }
+
+    private void RemoveUnitRow(ItemUnit unit)
+    {
+        Item.ItemUnits.Remove(unit);
+    }
+
+    private void OnUnitSelected(ItemUnit itemUnit, IEnumerable<int> values)
+    {
+        // Auto-populate Name if empty
+        var unitId = values.FirstOrDefault();
+        var unit = Units.FirstOrDefault(u => u.Id == unitId);
+        if (unit != null && string.IsNullOrWhiteSpace(itemUnit.Name))
+        {
+            itemUnit.Name = unit.Name;
+        }
+    }
+
+    private void BackupItem(object element)
+    {
+        elementBeforeEdit = newItemUnit((ItemUnit)element);
+    }
+
+    private void ResetItemToOriginalValues(object element)
+    {
+        var item = (ItemUnit)element;
+        var original = elementBeforeEdit;
+        // Restore values if cancelled
+        item.UnitId = original.UnitId;
+        item.Barcode = original.Barcode;
+        item.QtyPerBaseUnit = original.QtyPerBaseUnit;
+        item.Rate = original.Rate;
+        item.ItemUnitCode = original.ItemUnitCode;
+    }
+
+    private ItemUnit newItemUnit(ItemUnit item)
+    {
+        return new ItemUnit
+        {
+            UnitId = item.UnitId,
+            Barcode = item.Barcode,
+            QtyPerBaseUnit = item.QtyPerBaseUnit,
+            Rate = item.Rate,
+            ItemUnitCode = item.ItemUnitCode
+        };
+    }
+
+    void Submit()
+    {
+        if (string.IsNullOrWhiteSpace(Item.Name) || Item.UnitId == 0)
+        {
+            Snackbar.Add("Name and Base Unit are required.", Severity.Warning);
+            return; 
+        }
+        
+        // Populate Base Unit object reference if needed (optional)
+        var selectedUnit = Units.FirstOrDefault(u => u.Id == Item.UnitId);
+        if (selectedUnit != null) Item.BaseUnit = selectedUnit;
+        
+        // Handle Multi-Units references
+        foreach(var iu in Item.ItemUnits)
+        {
+             var u = Units.FirstOrDefault(x => x.Id == iu.UnitId);
+             if (u != null) iu.Unit = u;
+        }
+
+        MudDialog.Close(DialogResult.Ok(Item));
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,368 @@
+@page "/item-master"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@inject IItemService ItemService
+@inject IUnitService UnitService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" GutterBottom="true">Item Master</MudText>
+
+<MudGrid>
+    <!-- Form Section -->
+    <MudItem xs="12">
+        <MudCard Elevation="25" Class="mb-4">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">@((currentItem.Id == 0) ? "Add New Item" : "Edit Item")</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudTabs Bounded="true" Elevation="0" ApplyEffectsToContainer="true" PanelClass="px-1 py-2">
+                        <!-- General Info Tab -->
+                        <MudTabPanel Text="General">
+                            <MudGrid Class="mt-0">
+                                <MudItem xs="12" md="4">
+                                    <MudTextField T="string" Label="Item Name" @bind-Value="currentItem.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="6" md="2">
+                                    <MudTextField T="string" Label="Item Code" @bind-Value="currentItem.ItemCode" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="6" md="2">
+                                    <MudTextField T="string" Label="Barcode" @bind-Value="currentItem.Barcode" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="12" md="2">
+                                    <MudSelect T="int" Label="Base Unit" @bind-Value="currentItem.UnitId" Required="true" RequiredError="Base Unit is required." Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
+                                        @if (Units != null && Units.Any())
+                                        {
+                                            foreach (var unit in Units)
+                                            {
+                                                <MudSelectItem Value="@unit.Id">@unit.Name</MudSelectItem>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <MudSelectItem Value="0" Disabled="true">No Units Available</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="6" md="2">
+                                    <MudNumericField T="decimal" Label="Selling Rate" @bind-Value="currentItem.Rate" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="6" md="2">
+                                    <MudNumericField T="decimal" Label="Purchase Rate" @bind-Value="currentItem.PurchaseRate" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="12" md="2" Class="d-flex align-center">
+                                    <MudCheckBox T="bool" Label="Multi-Unit" @bind-Value="currentItem.IsMultiUnit" Color="Color.Primary" Class="mr-4" />
+                                    <MudCheckBox T="bool" Label="Active" @bind-Value="currentItem.IsActive" Color="Color.Success" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudTabPanel>
+                        
+                        <!-- Multi-Unit Tab -->
+                        <MudTabPanel Text="Multi-Units" Disabled="!currentItem.IsMultiUnit">
+                            <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddUnitRow" Size="Size.Small" Class="mb-2">Add Unit</MudButton>
+                            
+                            <MudTable Items="@currentItem.ItemUnits" Hover="true" Dense="true" Bordered="true" Striped="true" FixedHeader="true" Height="250px"
+                                      CanCancelEdit="true" @bind-SelectedItem="selectedItemUnit" 
+                                      CommitEditTooltip="Commit Edit" RowEditPreview="BackupItem" RowEditCancel="ResetItemToOriginalValues">
+                                <HeaderContent>
+                                    <MudTh>Unit</MudTh>
+                                    <MudTh>Qty</MudTh>
+                                    <MudTh>Rate</MudTh>
+                                    <MudTh Style="width: 50px;"></MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Unit">
+                                        @{
+                                            var u = Units.FirstOrDefault(x => x.Id == context.UnitId);
+                                            <MudText Typo="Typo.body2">@(u?.Name ?? "Select")</MudText>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Qty">@context.QtyPerBaseUnit</MudTd>
+                                    <MudTd DataLabel="Rate">@context.Rate</MudTd>
+                                    <MudTd>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => RemoveUnitRow(context))" Size="Size.Small" Color="Color.Error" />
+                                    </MudTd>
+                                </RowTemplate>
+                                <RowEditingTemplate>
+                                    <MudTd DataLabel="Unit">
+                                        <MudSelect T="int" @bind-Value="context.UnitId" Margin="Margin.Dense" Style="font-size: 0.8rem">
+                                            @foreach (var unit in Units)
+                                            {
+                                                <MudSelectItem Value="@unit.Id">@unit.Name</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudTd>
+                                    <MudTd DataLabel="Qty">
+                                        <MudNumericField @bind-Value="context.QtyPerBaseUnit" Margin="Margin.Dense" />
+                                    </MudTd>
+                                    <MudTd DataLabel="Rate">
+                                        <MudNumericField @bind-Value="context.Rate" Margin="Margin.Dense" />
+                                    </MudTd>
+                                </RowEditingTemplate>
+                            </MudTable>
+                        </MudTabPanel>
+                    </MudTabs>
+                </MudForm>
+            </MudCardContent>
+            <MudCardActions>
+                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await Save())" ButtonType="ButtonType.Button" Disabled="@_isProcessing" Class="ml-2">
+                     @if (_isProcessing)
+                     {
+                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                         <MudText Class="ms-2">Processing</MudText>
+                     }
+                     else
+                     {
+                         <MudText>@((currentItem.Id == 0) ? "Save" : "Update")</MudText>
+                     }
+                 </MudButton>
+                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="Reset" Class="ml-2">Reset</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+
+    <!-- Grid Section -->
+    <MudItem xs="12">
+        <MudCard Elevation="25">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Items List</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudGrid Justify="Justify.FlexEnd" Spacing="1" Class="align-center">
+                        <MudItem>
+                             <MudTextField @bind-Value="searchString" Placeholder="Search..." Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                        </MudItem>
+                        <MudItem>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="FilterItems">Search</MudButton>
+                        </MudItem>
+                    </MudGrid>
+                 </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTable Items="@FilteredItems" Hover="true" Striped="true" Bordered="true" Dense="true" OnRowClick="@(args => Edit(args.Item))" T="Item">
+                    <HeaderContent>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Base Unit</MudTh>
+                        <MudTh>Rate</MudTh>
+                        <MudTh>Multi</MudTh>
+                        <MudTh>Active</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Code">@context.ItemCode</MudTd>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Base Unit">@context.BaseUnit?.Name</MudTd>
+                        <MudTd DataLabel="Rate">@context.Rate</MudTd>
+                        <MudTd DataLabel="Multi">
+                             @if (context.IsMultiUnit)
+                             {
+                                 <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Text">@context.ItemUnits?.Count</MudChip>
+                             }
+                        </MudTd>
+                        <MudTd DataLabel="Active">
+                            <MudIcon Icon="@(context.IsActive ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" />
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<Item> Items = new List<Item>();
+    private List<Item> FilteredItems = new List<Item>();
+    private List<Unit> Units = new List<Unit>();
+    private Item currentItem = new Item { IsActive = true };
+    private string searchString = "";
+    private bool success;
+    private MudForm form;
+    private bool _isProcessing = false;
+    
+    // Multi-Unit Edit Table Variables
+    private ItemUnit selectedItemUnit;
+    private ItemUnit elementBeforeEdit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try 
+        {
+            // Load sequentially to ensure Units are ready and to catch errors individually
+            Items = await ItemService.GetAllItemsAsync();
+            FilteredItems = new List<Item>(Items);
+
+            Units = await UnitService.GetAllUnitsAsync();
+            if (Units == null || !Units.Any())
+            {
+                Snackbar.Add("Warning: No active Units found. Please populate Unit Master first.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+             Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+    }
+    
+    private void FilterItems()
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            FilteredItems = new List<Item>(Items);
+        }
+        else
+        {
+            FilteredItems = Items.Where(item => 
+                (item.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (item.ItemCode?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (item.Barcode?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            ).ToList();
+        }
+    }
+
+    private async Task Save()
+    {
+        form.Validate();
+        if (!success) 
+        {
+            Snackbar.Add("Please fix validation errors.", Severity.Warning);
+            if (currentItem.UnitId == 0) Snackbar.Add("Base Unit is required.", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        
+        try
+        {
+             // Populate Base Unit object reference if needed (optional)
+            var selectedUnit = Units.FirstOrDefault(u => u.Id == currentItem.UnitId);
+            if (selectedUnit != null) currentItem.BaseUnit = selectedUnit;
+            
+            if (currentItem.Id == 0)
+            {
+                await ItemService.AddItemAsync(currentItem);
+                Snackbar.Add("Item saved successfully", Severity.Success);
+            }
+            else
+            {
+                await ItemService.UpdateItemAsync(currentItem);
+                Snackbar.Add("Item updated successfully", Severity.Success);
+            }
+            
+            await LoadData(); // Reload items
+            FilterItems(); // Re-apply filter if any
+            Reset();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving item: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private void Edit(Item item)
+    {
+        // Deep clone for editing
+        currentItem = new Item 
+        { 
+            Id = item.Id, 
+            Name = item.Name, 
+            ItemCode = item.ItemCode,
+            Barcode = item.Barcode,
+            UnitId = item.UnitId, 
+            Rate = item.Rate,
+            PurchaseRate = item.PurchaseRate,
+            WholesaleRate = item.WholesaleRate,
+            IsMultiUnit = item.IsMultiUnit,
+            IsActive = item.IsActive,
+            // Clone ItemUnits list
+            ItemUnits = item.ItemUnits?.Select(iu => new ItemUnit 
+            { 
+                Id = iu.Id, 
+                ItemId = iu.ItemId, 
+                UnitId = iu.UnitId, 
+                Barcode = iu.Barcode, 
+                Rate = iu.Rate, 
+                QtyPerBaseUnit = iu.QtyPerBaseUnit,
+                Name = iu.Name
+            }).ToList() ?? new List<ItemUnit>()
+        };
+        
+        form.ResetValidation();
+    }
+
+    private async Task Delete(int id)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Warning", 
+            "Deleting can not be undone!", 
+            yesText:"Delete!", cancelText:"Cancel");
+
+        if (result == true)
+        {
+            await ItemService.DeleteItemAsync(id);
+            await LoadData();
+            FilterItems();
+            Snackbar.Add("Item deleted", Severity.Success);
+            if (currentItem.Id == id) Reset();
+        }
+    }
+
+    private void Reset()
+    {
+        currentItem = new Item { IsActive = true, ItemUnits = new List<ItemUnit>() };
+        form.ResetValidation();
+    }
+    
+    // Multi-Unit Logic similar to Dialog
+    private void AddUnitRow()
+    {
+        if (currentItem.ItemUnits == null) currentItem.ItemUnits = new List<ItemUnit>();
+        currentItem.ItemUnits.Add(new ItemUnit { ItemId = currentItem.Id });
+    }
+
+    private void RemoveUnitRow(ItemUnit unit)
+    {
+        currentItem.ItemUnits.Remove(unit);
+    }
+    
+    private void BackupItem(object element)
+    {
+        var itemVal = (ItemUnit)element;
+        elementBeforeEdit = new ItemUnit
+        {
+            UnitId = itemVal.UnitId,
+            Barcode = itemVal.Barcode,
+            QtyPerBaseUnit = itemVal.QtyPerBaseUnit,
+            Rate = itemVal.Rate,
+        };
+    }
+
+    private void ResetItemToOriginalValues(object element)
+    {
+        var item = (ItemUnit)element;
+        var original = elementBeforeEdit;
+        item.UnitId = original.UnitId;
+        item.Barcode = original.Barcode;
+        item.QtyPerBaseUnit = original.QtyPerBaseUnit;
+        item.Rate = original.Rate;
+    }
+}

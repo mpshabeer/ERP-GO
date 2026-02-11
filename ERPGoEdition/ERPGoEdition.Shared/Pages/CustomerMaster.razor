@@ -1,0 +1,227 @@
+@page "/customer-master"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@inject ICustomerService CustomerService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" GutterBottom="true">Customer Master</MudText>
+
+<MudGrid>
+    <!-- Form Section -->
+    <MudItem xs="12" md="5">
+        <MudCard Elevation="25">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">@((currentCustomer.Id == 0) ? "Add New Customer" : "Edit Customer")</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudGrid Class="mt-0">
+                        <MudItem xs="8">
+                            <MudTextField T="string" Label="Name" @bind-Value="currentCustomer.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudTextField T="string" Label="Code" @bind-Value="currentCustomer.Code" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        
+                        <MudItem xs="6">
+                            <MudTextField T="string" Label="Mobile" @bind-Value="currentCustomer.Mobile" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField T="string" Label="Email" @bind-Value="currentCustomer.Email" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudTextField T="string" Label="Address" @bind-Value="currentCustomer.Address" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                        </MudItem>
+
+                        <MudItem xs="6">
+                            <MudTextField T="string" Label="City" @bind-Value="currentCustomer.City" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField T="string" Label="Country" @bind-Value="currentCustomer.Country" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+
+                        <MudItem xs="6">
+                            <MudTextField T="string" Label="Tax Number" @bind-Value="currentCustomer.TaxNumber" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudNumericField T="decimal" Label="Credit Limit" @bind-Value="currentCustomer.CreditLimit" Format="N2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudCheckBox T="bool" Label="Active" @bind-Value="currentCustomer.IsActive" Color="Color.Success" />
+                        </MudItem>
+                    </MudGrid>
+                </MudForm>
+            </MudCardContent>
+            <MudCardActions>
+                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await Save())" ButtonType="ButtonType.Button" Disabled="@_isProcessing" Class="ml-2">
+                     @if (_isProcessing)
+                     {
+                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                         <MudText Class="ms-2">Processing</MudText>
+                     }
+                     else
+                     {
+                         <MudText>@((currentCustomer.Id == 0) ? "Save" : "Update")</MudText>
+                     }
+                 </MudButton>
+                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="Reset" Class="ml-2">Reset</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+
+    <!-- Grid Section -->
+    <MudItem xs="12" md="7">
+        <MudCard Elevation="25">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Customer List</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                 </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTable Items="@Customers" Hover="true" Striped="true" Bordered="true" Dense="true" Filter="new Func<Customer,bool>(FilterFunc)" OnRowClick="@(args => Edit(args.Item))" T="Customer">
+                    <HeaderContent>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Mobile</MudTh>
+                        <MudTh>City</MudTh>
+                        <MudTh>Active</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Code">@context.Code</MudTd>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Mobile">@context.Mobile</MudTd>
+                        <MudTd DataLabel="City">@context.City</MudTd>
+                        <MudTd DataLabel="Active">
+                            <MudIcon Icon="@(context.IsActive ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" />
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<Customer> Customers = new List<Customer>();
+    private Customer currentCustomer = new Customer { IsActive = true };
+    private string searchString = "";
+    private bool success;
+    private MudForm form;
+    private bool _isProcessing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try 
+        {
+            Customers = await CustomerService.GetAllCustomersAsync();
+        }
+        catch (Exception ex)
+        {
+             Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task Save()
+    {
+        form.Validate();
+        if (!success) return;
+
+        _isProcessing = true;
+        
+        try
+        {
+            if (currentCustomer.Id == 0)
+            {
+                await CustomerService.AddCustomerAsync(currentCustomer);
+                Snackbar.Add("Customer saved successfully", Severity.Success);
+            }
+            else
+            {
+                await CustomerService.UpdateCustomerAsync(currentCustomer);
+                Snackbar.Add("Customer updated successfully", Severity.Success);
+            }
+            
+            await LoadData();
+            Reset();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving customer: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private void Edit(Customer customer)
+    {
+        // Simple clone for editing
+        currentCustomer = new Customer
+        {
+            Id = customer.Id,
+            Name = customer.Name,
+            Code = customer.Code,
+            Address = customer.Address,
+            City = customer.City,
+            Country = customer.Country,
+            Mobile = customer.Mobile,
+            Email = customer.Email,
+            TaxNumber = customer.TaxNumber,
+            CreditLimit = customer.CreditLimit,
+            IsActive = customer.IsActive
+        };
+        form.ResetValidation();
+    }
+
+    private async Task Delete(int id)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Warning", 
+            "Deleting can not be undone!", 
+            yesText:"Delete!", cancelText:"Cancel");
+
+        if (result == true)
+        {
+            await CustomerService.DeleteCustomerAsync(id);
+            await LoadData();
+            Snackbar.Add("Customer deleted", Severity.Success);
+            if (currentCustomer.Id == id) Reset();
+        }
+    }
+
+    private void Reset()
+    {
+        currentCustomer = new Customer { IsActive = true };
+        form.ResetValidation();
+    }
+
+    private bool FilterFunc(Customer customer)
+    {
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (customer.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (customer.Code?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (customer.Mobile?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+}

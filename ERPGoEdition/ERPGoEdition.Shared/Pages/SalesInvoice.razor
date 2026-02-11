@@ -1,0 +1,371 @@
+@page "/sales-invoice"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@inject ISalesService SalesService
+@inject ICustomerService CustomerService
+@inject IItemService ItemService
+@inject IUnitService UnitService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<MudText Typo="Typo.h5" GutterBottom="true">Sales Invoice</MudText>
+
+<MudForm @ref="form" @bind-IsValid="@success">
+    <MudGrid>
+        <!-- Header -->
+        <MudItem xs="12">
+             <MudCard Elevation="25" Class="mb-4">
+                 <MudCardHeader>
+                     <CardHeaderContent>
+                         <MudText Typo="Typo.h6">Invoice Details</MudText>
+                     </CardHeaderContent>
+                 </MudCardHeader>
+                 <MudCardContent>
+                     <MudGrid>
+                         <MudItem xs="12" md="4">
+                             <MudAutocomplete T="Customer" Label="Customer" @bind-Value="invoice.Customer" SearchFunc="@SearchCustomers"
+                                              ToStringFunc="@(c => c == null ? null : $"{c.Name} ({c.Code})")"
+                                              Required="true" RequiredError="Customer is required." Variant="Variant.Outlined" Margin="Margin.Dense" />
+                         </MudItem>
+                         <MudItem xs="12" md="4">
+                             <MudTextField @bind-Value="invoice.InvoiceNo" Label="Invoice No" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+                         </MudItem>
+                         <MudItem xs="12" md="4">
+                             <MudDatePicker Label="Date" @bind-Date="invoiceDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                         </MudItem>
+                         <MudItem xs="12">
+                             <MudTextField @bind-Value="invoice.Notes" Label="Notes" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                         </MudItem>
+                     </MudGrid>
+                 </MudCardContent>
+             </MudCard>
+        </MudItem>
+
+        <!-- Lines -->
+        <MudItem xs="12">
+            <MudTable Items="@invoice.SalesInvoiceItems" Hover="true" Dense="true" Bordered="true" Striped="true">
+                <HeaderContent>
+                    <MudTh>Item</MudTh>
+                    <MudTh>Unit</MudTh>
+                    <MudTh>Stock</MudTh>
+                    <MudTh>Qty</MudTh>
+                    <MudTh>Rate</MudTh>
+                    <MudTh>Amount</MudTh>
+                    <MudTh>Action</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <!-- Read Only View Not Needed as we want inline edit always? Or Add Row approach? -->
+                    <!-- We will use a Footer Row to Add, and basic inline display for simplicity used commonly in simplified invoices -->
+                    <MudTd>@context.Item?.Name</MudTd>
+                    <MudTd>@context.Unit?.Name</MudTd>
+                     <MudTd>
+                         @if(context.Item != null)
+                         {
+                              <MudChip Size="Size.Small" Color="@(context.Item.CurrentStock > 0 ? Color.Success : Color.Error)">@context.Item.CurrentStock</MudChip>
+                         }
+                    </MudTd>
+                    <MudTd>@context.Qty</MudTd>
+                    <MudTd>@context.Rate</MudTd>
+                    <MudTd>@context.Amount</MudTd>
+                     <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => RemoveLine(context))" Color="Color.Error" Size="Size.Small" />
+                    </MudTd>
+                </RowTemplate>
+                <FooterContent>
+                    <MudTfootRow>
+                        <MudTd>
+                            <MudAutocomplete T="Item" Label="Select Item" Value="tempLineItem" ValueChanged="OnItemSelected" SearchFunc="@SearchItems"
+                                             ToStringFunc="@(i => i == null ? null : i.Name)"
+                                              Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                 <ItemTemplate Context="e">
+                                     <MudText Typo="Typo.body2">
+                                         @e.Name 
+                                         <MudChip Size="Size.Small" Variant="Variant.Text" Color="@(e.CurrentStock > 0 ? Color.Success : Color.Error)">Stk: @e.CurrentStock</MudChip>
+                                     </MudText>
+                                 </ItemTemplate>
+                            </MudAutocomplete>
+                        </MudTd>
+                        <MudTd>
+                             <MudSelect T="int" Value="tempUnitId" ValueChanged="OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(tempLineItem == null)">
+                                 @foreach(var u in availableUnits)
+                                 {
+                                     <MudSelectItem Value="@u.Id">@u.Name</MudSelectItem>
+                                 }
+                             </MudSelect>
+                        </MudTd>
+                         <MudTd>
+                             <!-- Stock Display for Temp Line -->
+                             @if(tempLineItem != null)
+                             {
+                                  <MudText Typo="Typo.body2" Color="@(tempLineItem.CurrentStock > 0 ? Color.Success : Color.Error)">@tempLineItem.CurrentStock</MudText>
+                             }
+                        </MudTd>
+                        <MudTd>
+                            <MudNumericField @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense" TextChanged="CalculateTempAmount" />
+                        </MudTd>
+                        <MudTd>
+                             <MudNumericField @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense" TextChanged="CalculateTempAmount" />
+                        </MudTd>
+                        <MudTd>
+                            <MudText>@tempAmount</MudText>
+                        </MudTd>
+                        <MudTd>
+                             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddLine" Size="Size.Small">Add</MudButton>
+                        </MudTd>
+                    </MudTfootRow>
+                    <MudTfootRow>
+                        <MudTd colspan="5" Class="text-right"><strong>Total:</strong></MudTd>
+                        <MudTd colspan="2"><strong>@invoice.TotalAmount</strong></MudTd>
+                    </MudTfootRow>
+                </FooterContent>
+            </MudTable>
+        </MudItem>
+        
+        <MudItem xs="12" Class="d-flex justify-end mt-4">
+             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveInvoice" Disabled="_isProcessing" Class="ml-2">
+                 @if (_isProcessing)
+                 {
+                     <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                     <MudText Class="ms-2">Processing</MudText>
+                 }
+                 else
+                 {
+                     <MudText>Save Invoice</MudText>
+                 }
+             </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudForm>
+
+@code {
+    private SalesInvoice invoice = new SalesInvoice();
+    private DateTime? invoiceDate = DateTime.Now;
+    private bool success;
+    private MudForm form;
+    private bool _isProcessing = false;
+
+    // Temp Line Variables
+    private Item tempLineItem;
+    private int tempUnitId;
+    private decimal tempQty = 1;
+    private decimal tempRate;
+    private decimal tempAmount;
+    private List<Unit> availableUnits = new List<Unit>();
+
+    // Cache
+    private List<Customer> customers = new List<Customer>();
+    private List<Item> items = new List<Item>();
+    private List<Unit> allUnits = new List<Unit>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        invoice.InvoiceNo = $"INV-{DateTime.Now:yyyyMMddHHmm}"; // Simple Auto Gen
+    }
+
+    private async Task LoadData()
+    {
+        try 
+        {
+            var cTask = CustomerService.GetAllCustomersAsync();
+            var iTask = ItemService.GetAllItemsAsync();
+            var uTask = UnitService.GetAllUnitsAsync();
+            await Task.WhenAll(cTask, iTask, uTask);
+            
+            customers = cTask.Result;
+            items = iTask.Result;
+            allUnits = uTask.Result;
+        }
+        catch (Exception ex)
+        {
+             Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task<IEnumerable<Customer>> SearchCustomers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value)) return customers;
+        return customers.Where(x => x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    private async Task<IEnumerable<Item>> SearchItems(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value)) return items;
+        // In a real app, optimize this to simple check
+        return items.Where(x => x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase) 
+                             || x.ItemCode.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    // Logic for Unit Change
+    private async void OnItemSelected(Item item)
+    {
+        tempLineItem = item;
+        if (item == null) 
+        {
+            availableUnits.Clear();
+            return;
+        }
+
+        // Prepare Available Units: Base + MultiUnits
+        availableUnits = new List<Unit>();
+        
+        // 1. Add Base Unit
+        var baseUnit = allUnits.FirstOrDefault(u => u.Id == item.UnitId);
+        if (baseUnit != null) availableUnits.Add(baseUnit);
+
+        // 2. Add Multi Units
+        if (item.IsMultiUnit && item.ItemUnits != null)
+        {
+            foreach(var iu in item.ItemUnits)
+            {
+                var u = allUnits.FirstOrDefault(un => un.Id == iu.UnitId);
+                if(u != null && !availableUnits.Any(x => x.Id == u.Id)) availableUnits.Add(u);
+            }
+        }
+
+        // Default Select Base Unit
+        if (availableUnits.Any())
+        {
+            tempUnitId = availableUnits.First().Id;
+            tempRate = item.Rate; // Default Base Rate
+        }
+        else
+        {
+            tempUnitId = 0;
+            tempRate = 0;
+        }
+        
+        CalculateTempAmount();
+        StateHasChanged();
+    }
+
+    private void OnUnitChanged(int unitId)
+    {
+        tempUnitId = unitId;
+        if (tempLineItem == null) return;
+
+        // Check if Base Unit
+        if (unitId == tempLineItem.UnitId)
+        {
+            tempRate = tempLineItem.Rate;
+        }
+        // Check if Multi Unit
+        else if (tempLineItem.ItemUnits != null)
+        {
+            var iu = tempLineItem.ItemUnits.FirstOrDefault(x => x.UnitId == unitId);
+            if (iu != null)
+            {
+                tempRate = iu.Rate;
+            }
+        }
+        CalculateTempAmount();
+    }
+    
+    // Workaround for MudNumericField TextChanged requiring specific signature or purely binding
+    private void CalculateTempAmount()
+    {
+         // Recalculate based on binded values
+         // Wait for binding to update?
+         // Actually TextChanged doesn't pass value automatically in older versions, 
+         // but @bind:after or setter logic is better. Here we just strictly calculate on Add or UI refresh.
+         // Let's use Property binding logic? No, simple method called by events.
+         tempAmount = tempQty * tempRate;
+    }
+    
+    // We can also use setters
+    // But for now, let's just ensure AddLine recalculates to be safe.
+
+    private void AddLine()
+    {
+        CalculateTempAmount(); 
+        if (tempLineItem == null || tempUnitId == 0 || tempQty <= 0)
+        {
+            Snackbar.Add("Invalid Line Item", Severity.Warning);
+            return;
+        }
+
+        // Calculate QtyInBaseUnit for Stock
+        decimal qtyInBase = tempQty;
+        if (tempUnitId != tempLineItem.UnitId) // Not Base
+        {
+             var iu = tempLineItem.ItemUnits?.FirstOrDefault(u => u.UnitId == tempUnitId);
+             if (iu != null)
+             {
+                 qtyInBase = tempQty * iu.QtyPerBaseUnit;
+             }
+        }
+
+        var line = new SalesInvoiceItem
+        {
+            ItemId = tempLineItem.Id,
+            Item = tempLineItem, // Keep reference for display
+            UnitId = tempUnitId,
+            Unit = availableUnits.FirstOrDefault(u => u.Id == tempUnitId),
+            Qty = tempQty,
+            Rate = tempRate,
+            Amount = tempQty * tempRate,
+            QtyInBaseUnit = qtyInBase
+        };
+
+        invoice.SalesInvoiceItems.Add(line);
+        UpdateTotal();
+        
+        // Reset Temp
+        tempLineItem = null;
+        tempUnitId = 0;
+        tempQty = 1;
+        tempRate = 0;
+        tempAmount = 0;
+        availableUnits.Clear();
+    }
+
+    private void RemoveLine(SalesInvoiceItem item)
+    {
+        invoice.SalesInvoiceItems.Remove(item);
+        UpdateTotal();
+    }
+
+    private void UpdateTotal()
+    {
+        invoice.TotalAmount = invoice.SalesInvoiceItems.Sum(x => x.Amount);
+    }
+
+    private async Task SaveInvoice()
+    {
+        form.Validate();
+        if (!success) return;
+        if (!invoice.SalesInvoiceItems.Any()) 
+        {
+            Snackbar.Add("Please add at least one item.", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        try
+        {
+            invoice.Date = invoiceDate ?? DateTime.Now;
+            invoice.CustomerId = invoice.Customer.Id;
+            invoice.Customer = null; // Clear nav property to avoid tracking issues if attached
+            
+            // Clean up Line Items Nav properties to avoid EF trying to re-add them
+            foreach(var line in invoice.SalesInvoiceItems) 
+            {
+                line.Item = null;
+                line.Unit = null;
+            }
+
+            await SalesService.CreateInvoice(invoice);
+            Snackbar.Add("Invoice Saved Successfully!", Severity.Success);
+            NavigationManager.NavigateTo("/sales-invoice", true); // Reload for fresh state
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+             // Re-load data to restore UI state if needed, or simply let user retry
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+}

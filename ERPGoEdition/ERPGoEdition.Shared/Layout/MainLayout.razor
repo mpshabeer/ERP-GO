@@ -33,8 +33,8 @@
                       PanelClass="erp-tab-content">
                 @foreach (var tab in TabService.Tabs)
                 {
-                    <MudTabPanel ID="@tab.Id">
-                        <TabWrapperContent>
+                    <MudTabPanel @key="@tab.Id" ID="@tab.Id">
+                        <TabContent>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
                                 <MudText Typo="Typo.body2">@tab.Title</MudText>
                                 @if (tab.IsClosable)
@@ -44,7 +44,7 @@
                                                    OnClick="@(() => CloseTabById(tab.Id))" />
                                 }
                             </MudStack>
-                        </TabWrapperContent>
+                        </TabContent>
                         <ChildContent>
                             @tab.Content
                         </ChildContent>

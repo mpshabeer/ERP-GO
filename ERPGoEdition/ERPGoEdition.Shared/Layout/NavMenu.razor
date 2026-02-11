@@ -5,6 +5,17 @@
     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" OnClick="@(() => OpenTab("Dashboard", typeof(Home)))">Dashboard</MudNavLink>
     <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Add" OnClick="@(() => OpenTab("Counter", typeof(Counter)))">Counter</MudNavLink>
     <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Cloud" OnClick="@(() => OpenTab("Weather", typeof(Weather)))">Weather</MudNavLink>
+
+    <MudNavGroup Title="Masters" Icon="@Icons.Material.Filled.Settings" Expanded="true">
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List" OnClick="@(() => OpenTab("Unit Master", typeof(UnitMaster)))">Unit Master</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Category" OnClick="@(() => OpenTab("Item Master", typeof(ItemMaster)))">Item Master</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People" OnClick="@(() => OpenTab("Customer Master", typeof(CustomerMaster)))">Customer Master</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalShipping" OnClick="@(() => OpenTab("Supplier Master", typeof(SupplierMaster)))">Supplier Master</MudNavLink>
+    </MudNavGroup>
+    
+    <MudNavGroup Title="Transactions" Icon="@Icons.Material.Filled.Receipt" Expanded="true">
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => OpenTab("Sales Invoice", typeof(SalesInvoice)))">Sales Invoice</MudNavLink>
+    </MudNavGroup>
 </MudNavMenu>
 
 @code {

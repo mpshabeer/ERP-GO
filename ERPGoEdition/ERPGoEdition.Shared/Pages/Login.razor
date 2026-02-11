@@ -1,0 +1,46 @@
+@page "/login"
+@using ERPGOAPPLICATION.DTOs
+@using ERPGOAPPLICATION.Interfaces
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h5" GutterBottom="true">Login</MudText>
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudTextField T="string" Label="Email" @bind-Value="loginModel.Email" Required="true" RequiredError="Email is required!" />
+            <MudTextField T="string" Label="Password" @bind-Value="loginModel.Password" InputType="InputType.Password" Required="true" RequiredError="Password is required!" />
+            
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DisableElevation="true" OnClick="@OnLoginAsync" Class="mt-4">Login</MudButton>
+        </MudForm>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@errorMessage</MudAlert>
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    MudForm form;
+    bool success;
+    string errorMessage = "";
+    LoginRequest loginModel = new LoginRequest();
+
+    private async Task OnLoginAsync()
+    {
+        await form.Validate();
+        if (success)
+        {
+            var result = await AuthService.LoginAsync(loginModel);
+            if (result.IsSuccess)
+            {
+                // Navigate to home or dashboard
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                errorMessage = result.Message;
+            }
+        }
+    }
+}
