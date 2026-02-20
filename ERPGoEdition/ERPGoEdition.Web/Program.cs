@@ -4,6 +4,8 @@ using ERPGOINFRASTRUCTURE; // For AddInfrastructureServices
 using ERPGoEdition.Web.Components;
 using ERPGoEdition.Web.Services;
 using MudBlazor.Services;
+using ERPGOINFRASTRUCTURE.Services;
+using ERPGOAPPLICATION.Interfaces;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,10 +18,12 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
 builder.Services.AddSingleton<ITabService, TabService>();
 builder.Services.AddMudServices();
+builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
+builder.Services.AddSingleton<ICategoryService, CategoryService>(); // Singleton for Blazor Server
 
 // Auth Services (Web uses Direct DB connection to avoid starting separate API)
 // builder.Services.AddApiClientServices(new Uri("https://localhost:7123")); 
-string connectionString = "Server=DESKTOP-U0M528H\\SQLEXPRESS;Database=ERPGODB;User Id=sa;Password=8190;TrustServerCertificate=True;MultipleActiveResultSets=true";
+string connectionString = "Server=.\\SQLEXPRESS01;Database=ERPGoEdition;User Id=sa1;Password=5018;TrustServerCertificate=True;MultipleActiveResultSets=true";
 builder.Services.AddInfrastructureServices(connectionString);
 
 

@@ -17,7 +17,7 @@ public class SupplierService : ISupplierService
     public async Task<List<Supplier>> GetAllSuppliersAsync()
     {
         using var context = await _contextFactory.CreateDbContextAsync();
-        return await context.Suppliers.Where(s => s.IsActive).ToListAsync();
+        return await context.Suppliers.ToListAsync();
     }
 
     public async Task<Supplier?> GetSupplierByIdAsync(int id)

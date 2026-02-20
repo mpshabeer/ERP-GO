@@ -19,6 +19,17 @@ public class ApplicationDbContext : DbContext
     public DbSet<StockLedger> StockLedger { get; set; }
     public DbSet<SalesInvoice> SalesInvoices { get; set; }
     public DbSet<SalesInvoiceItem> SalesInvoiceItems { get; set; }
+    public DbSet<Purchase> Purchases { get; set; }
+    public DbSet<PurchaseItem> PurchaseItems { get; set; }
+    public DbSet<Category> Categories { get; set; }
+    
+    public DbSet<ItemOpeningStock> ItemOpeningStocks { get; set; }
+    public DbSet<OpeningStockHistory> OpeningStockHistories { get; set; }
+    
+    public DbSet<StockAdjustmentHeader> StockAdjustmentHeaders { get; set; }
+    public DbSet<StockAdjustmentDetail> StockAdjustmentDetails { get; set; }
+
+    public DbSet<AppSetting> AppSettings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,5 +48,13 @@ public class ApplicationDbContext : DbContext
             .WithOne(iu => iu.Item)
             .HasForeignKey(iu => iu.ItemId)
             .OnDelete(DeleteBehavior.Cascade);
+        // Configure Item -> Category relationship
+        modelBuilder.Entity<Item>()
+            .HasOne(i => i.Category)
+            .WithMany()
+            .HasForeignKey(i => i.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+
     }
 }

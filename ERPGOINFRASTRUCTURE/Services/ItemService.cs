@@ -20,9 +20,10 @@ public class ItemService : IItemService
         using var context = await _contextFactory.CreateDbContextAsync();
         return await context.Items
             .Include(i => i.BaseUnit)
+            .Include(i => i.Category)
             .Include(i => i.ItemUnits)
             .ThenInclude(iu => iu.Unit)
-            .Where(i => i.IsActive)
+            //.Where(i => i.IsActive) // Allowing all items for UI filtering
             .ToListAsync();
     }
 
@@ -38,18 +39,61 @@ public class ItemService : IItemService
 
     public async Task<Item> AddItemAsync(Item item)
     {
-        using var context = await _contextFactory.CreateDbContextAsync();
-        
-        // Prevent tracking issues with related entities
-        if (item.BaseUnit != null) context.Entry(item.BaseUnit).State = EntityState.Unchanged;
-        foreach (var unit in item.ItemUnits)
+        try
         {
-            if (unit.Unit != null) context.Entry(unit.Unit).State = EntityState.Unchanged;
-        }
+            using var context = await _contextFactory.CreateDbContextAsync();
 
-        context.Items.Add(item);
-        await context.SaveChangesAsync();
-        return item;
+            // Prevent tracking issues with related entities
+            if (item.BaseUnit != null) context.Entry(item.BaseUnit).State = EntityState.Unchanged;
+            if (item.Category != null) context.Entry(item.Category).State = EntityState.Unchanged;
+            foreach (var unit in item.ItemUnits)
+            {
+                if (unit.Unit != null) context.Entry(unit.Unit).State = EntityState.Unchanged;
+            }
+
+            context.Items.Add(item);
+
+            // Handle Opening Stock
+            if (item.CurrentStock > 0)
+            {
+                var stockEntry = new StockLedger
+                {
+                    Date = DateTime.Now,
+                    // ItemId is not yet generated, but EF Core will handle the FK fixup 
+                    // IF we add it to the context and let SaveChanges handle it.
+                    // However, relying on navigation property is safer if relations are set up.
+                    // Since StockLedger is not a navigation property of Item (it's the other way round), 
+                    // we depend on SaveChanges to generate Item.Id first. 
+                    // But wait, if we add it to context, EF might not know the Id yet.
+                    // Best to Save Item first, then Add Stock Ledger.
+
+                    ItemId = item.Id, // This will be 0 here
+                    Qty = item.CurrentStock,
+                    TransactionType = "OPENING",
+                    RefId = "OP-STOCK",
+                    Notes = "Opening Stock"
+                };
+
+                // We need to save item first to get Id, OR use navigation property if we added one to Item (we didn't).
+                await context.SaveChangesAsync();
+
+                // Now Item.Id is populated
+                stockEntry.ItemId = item.Id;
+                context.StockLedger.Add(stockEntry);
+                await context.SaveChangesAsync();
+            }
+            else
+            {
+                await context.SaveChangesAsync();
+            }
+
+            return item;
+        }
+        catch (Exception ex)
+        {
+
+            throw ex;
+        }
     }
 
     public async Task<Item> UpdateItemAsync(Item item)
@@ -84,7 +128,7 @@ public class ItemService : IItemService
             foreach (var unit in item.ItemUnits)
             {
                 var existingUnit = existingItem.ItemUnits.FirstOrDefault(u => u.Id == unit.Id && u.Id != 0);
-                
+
                 if (existingUnit != null)
                 {
                     // Update
@@ -115,5 +159,38 @@ public class ItemService : IItemService
             context.Items.Update(item);
             await context.SaveChangesAsync();
         }
+    }
+    public async Task<string> GetNextItemCodeAsync(string prefix, int startNumber)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        
+        // Fetch valid codes that start with the prefix
+        // We fetch potentially relevant codes. String comparison in SQL can be tricky for "Max" number.
+        // So we grab the latest ones.
+        var codes = await context.Items
+            .Where(i => i.ItemCode != null && i.ItemCode.StartsWith(prefix))
+            .Select(i => i.ItemCode)
+            .ToListAsync();
+
+        int maxNumber = 0;
+
+        foreach (var code in codes)
+        {
+            if (string.IsNullOrEmpty(code)) continue;
+            
+            // Remove prefix
+            string numberPart = code.Substring(prefix.Length);
+            
+            // Try parse
+            if (int.TryParse(numberPart, out int number))
+            {
+                if (number > maxNumber) maxNumber = number;
+            }
+        }
+
+        int nextNumber = maxNumber + 1;
+        if (nextNumber < startNumber) nextNumber = startNumber;
+
+        return $"{prefix}{nextNumber}";
     }
 }

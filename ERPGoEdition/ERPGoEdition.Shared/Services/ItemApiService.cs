@@ -18,4 +18,5 @@ public class ItemApiService : IItemService
     public Task<Item> AddItemAsync(Item item) => _apiClient.AddItemAsync(item);
     public Task<Item> UpdateItemAsync(Item item) => _apiClient.UpdateItemAsync(item);
     public Task DeleteItemAsync(int id) => _apiClient.DeleteItemAsync(id);
+    public Task<string> GetNextItemCodeAsync(string prefix, int startNumber) => _apiClient.GetNextItemCodeAsync(prefix, startNumber);
 }

@@ -20,4 +20,7 @@ public interface IItemApiClient
 
     [Delete("/api/items/{id}")]
     Task DeleteItemAsync(int id);
+
+    [Get("/api/items/next-code")]
+    Task<string> GetNextItemCodeAsync(string prefix, int startNumber);
 }

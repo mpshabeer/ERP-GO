@@ -1,7 +1,9 @@
 ﻿@inherits LayoutComponentBase
 @inject ITabService TabService
 @inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
 @using ERPGoEdition.Shared.Pages
+@using ERPGoEdition.Shared.Dialogs
 
 <MudThemeProvider />
 <MudPopoverProvider />
@@ -19,7 +21,7 @@
                        Title="@(isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen")" />
         <MudIconButton Icon="@Icons.Material.Filled.Person" Color="Color.Inherit" />
     </MudAppBar>
-    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true">
         <NavMenu />
     </MudDrawer>
     <MudMainContent>
@@ -66,6 +68,33 @@
 @code {
     bool _drawerOpen = true;
     bool isFullscreen = false;
+    private DotNetObjectReference<MainLayout>? _objRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                window.registerSettingsShortcut = (dotNetHelper) => {
+                    document.addEventListener('keydown', function(e) {
+                        if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) {
+                            e.preventDefault();
+                            dotNetHelper.invokeMethodAsync('OpenSettingsDialog');
+                        }
+                    });
+                };
+            ");
+            await JSRuntime.InvokeVoidAsync("registerSettingsShortcut", _objRef);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OpenSettingsDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
+        DialogService.Show<SettingsDialog>("Application Settings", options);
+    }
 
     void DrawerToggle()
     {
@@ -119,6 +148,7 @@
     
     public void Dispose()
     {
+        _objRef?.Dispose();
         TabService.OnChange -= HandleTabChange;
     }
 

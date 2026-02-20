@@ -1,0 +1,40 @@
+@using ERPGODomain.Entities
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudText><strong>Adjustment No:</strong> @Header.AdjustmentNo</MudText>
+                <MudText><strong>Date:</strong> @Header.Date.ToString("g")</MudText>
+                <MudText><strong>By:</strong> @Header.AdjustedBy</MudText>
+                <MudText><strong>Notes:</strong> @Header.Notes</MudText>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTable Items="@Header.Details" Dense="true" Bordered="true" Striped="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Item</MudTh>
+                        <MudTh>System Qty</MudTh>
+                        <MudTh>Physical Qty</MudTh>
+                        <MudTh>Diff</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Item?.Name</MudTd>
+                        <MudTd>@context.SystemQty</MudTd>
+                        <MudTd>@context.NewQty</MudTd>
+                        <MudTd Style="@(context.AdjustedQty < 0 ? "color:red" : "color:green")">@context.AdjustedQty</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public StockAdjustmentHeader Header { get; set; }
+
+    void Cancel() => MudDialog.Cancel();
+}

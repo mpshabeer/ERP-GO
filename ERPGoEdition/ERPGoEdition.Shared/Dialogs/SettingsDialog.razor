@@ -1,0 +1,46 @@
+@using ERPGOAPPLICATION.Interfaces
+@inject IAppSettingsService AppSettingsService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form">
+            <MudText Typo="Typo.h6" Class="mb-4">Application Settings</MudText>
+            <MudStack Spacing="3">
+                <MudSwitch @bind-Value="settings.AutoGenerateItemCode" Label="Auto-Generate Item Code" Color="Color.Primary" />
+                
+                @if (settings.AutoGenerateItemCode)
+                {
+                    <MudTextField @bind-Value="settings.ItemCodePrefix" Label="Item Code Prefix" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Prefix for auto-generated codes (e.g. ITEM-)" />
+                    <MudTextField @bind-Value="settings.CategoryCodePrefix" Label="Category Code Prefix" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Prefix for auto-generated categories (e.g. CAT-)" />
+                    <MudTextField @bind-Value="settings.SubCategoryCodePrefix" Label="Sub-Category Code Prefix" Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Prefix for auto-generated sub-categories (e.g. SUB-)" />
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@(() => Save())">Save Settings</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    
+    private AppSettingsModel settings = new AppSettingsModel();
+    private MudForm form;
+
+    protected override async Task OnInitializedAsync()
+    {
+        settings = await AppSettingsService.GetSettingsAsync();
+    }
+
+    private async Task Save()
+    {
+        await AppSettingsService.SaveSettingsAsync(settings);
+        Snackbar.Add("Settings saved successfully", Severity.Success);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

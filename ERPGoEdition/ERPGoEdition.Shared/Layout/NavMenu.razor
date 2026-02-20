@@ -3,18 +3,21 @@
 
 <MudNavMenu>
     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" OnClick="@(() => OpenTab("Dashboard", typeof(Home)))">Dashboard</MudNavLink>
-    <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Add" OnClick="@(() => OpenTab("Counter", typeof(Counter)))">Counter</MudNavLink>
-    <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Cloud" OnClick="@(() => OpenTab("Weather", typeof(Weather)))">Weather</MudNavLink>
+
 
     <MudNavGroup Title="Masters" Icon="@Icons.Material.Filled.Settings" Expanded="true">
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List" OnClick="@(() => OpenTab("Unit Master", typeof(UnitMaster)))">Unit Master</MudNavLink>
-        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Category" OnClick="@(() => OpenTab("Item Master", typeof(ItemMaster)))">Item Master</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Category" OnClick="@(() => OpenTab("Category Master", typeof(CategoryMaster)))">Category Master</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inventory" OnClick="@(() => OpenTab("Item Master", typeof(ItemMaster)))">Item Master</MudNavLink>
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People" OnClick="@(() => OpenTab("Customer Master", typeof(CustomerMaster)))">Customer Master</MudNavLink>
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalShipping" OnClick="@(() => OpenTab("Supplier Master", typeof(SupplierMaster)))">Supplier Master</MudNavLink>
     </MudNavGroup>
     
     <MudNavGroup Title="Transactions" Icon="@Icons.Material.Filled.Receipt" Expanded="true">
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => OpenTab("Sales Invoice", typeof(SalesInvoice)))">Sales Invoice</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ShoppingCart" OnClick="@(() => OpenTab("Purchase Entry", typeof(PurchaseEntry)))">Purchase Entry</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inventory2" OnClick="@(() => OpenTab("Opening Stock", typeof(OpeningStockEntry)))">Opening Stock</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.EditNote" OnClick="@(() => OpenTab("Stock Adjustment", typeof(StockAdjustmentEntry)))">Stock Adjustment</MudNavLink>
     </MudNavGroup>
 </MudNavMenu>
 

@@ -1,6 +1,5 @@
 using ERPGOAPPLICATION.Interfaces;
 using ERPGOINFRASTRUCTURE.Services;
-using ERPGOINFRASTRUCTURE.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,6 +20,9 @@ public static class DependencyInjection
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IStockService, StockService>();
         services.AddScoped<ISalesService, SalesService>();
+        services.AddScoped<IPurchaseService, PurchaseService>();
+        services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
         
         return services;
     }

@@ -1,367 +1,941 @@
 @page "/sales-invoice"
 @using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.DTOs
 @using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Dialogs
+@using InvoiceEntity = ERPGODomain.Entities.SalesInvoice
+@using InvoiceItemEntity = ERPGODomain.Entities.SalesInvoiceItem
 @inject ISalesService SalesService
 @inject ICustomerService CustomerService
 @inject IItemService ItemService
 @inject IUnitService UnitService
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
+@inject IDialogService DialogService
 
-<MudText Typo="Typo.h5" GutterBottom="true">Sales Invoice</MudText>
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;">
 
-<MudForm @ref="form" @bind-IsValid="@success">
-    <MudGrid>
-        <!-- Header -->
-        <MudItem xs="12">
-             <MudCard Elevation="25" Class="mb-4">
-                 <MudCardHeader>
-                     <CardHeaderContent>
-                         <MudText Typo="Typo.h6">Invoice Details</MudText>
-                     </CardHeaderContent>
-                 </MudCardHeader>
-                 <MudCardContent>
-                     <MudGrid>
-                         <MudItem xs="12" md="4">
-                             <MudAutocomplete T="Customer" Label="Customer" @bind-Value="invoice.Customer" SearchFunc="@SearchCustomers"
-                                              ToStringFunc="@(c => c == null ? null : $"{c.Name} ({c.Code})")"
-                                              Required="true" RequiredError="Customer is required." Variant="Variant.Outlined" Margin="Margin.Dense" />
-                         </MudItem>
-                         <MudItem xs="12" md="4">
-                             <MudTextField @bind-Value="invoice.InvoiceNo" Label="Invoice No" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
-                         </MudItem>
-                         <MudItem xs="12" md="4">
-                             <MudDatePicker Label="Date" @bind-Date="invoiceDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                         </MudItem>
-                         <MudItem xs="12">
-                             <MudTextField @bind-Value="invoice.Notes" Label="Notes" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                         </MudItem>
-                     </MudGrid>
-                 </MudCardContent>
-             </MudCard>
-        </MudItem>
-
-        <!-- Lines -->
-        <MudItem xs="12">
-            <MudTable Items="@invoice.SalesInvoiceItems" Hover="true" Dense="true" Bordered="true" Striped="true">
-                <HeaderContent>
-                    <MudTh>Item</MudTh>
-                    <MudTh>Unit</MudTh>
-                    <MudTh>Stock</MudTh>
-                    <MudTh>Qty</MudTh>
-                    <MudTh>Rate</MudTh>
-                    <MudTh>Amount</MudTh>
-                    <MudTh>Action</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <!-- Read Only View Not Needed as we want inline edit always? Or Add Row approach? -->
-                    <!-- We will use a Footer Row to Add, and basic inline display for simplicity used commonly in simplified invoices -->
-                    <MudTd>@context.Item?.Name</MudTd>
-                    <MudTd>@context.Unit?.Name</MudTd>
-                     <MudTd>
-                         @if(context.Item != null)
-                         {
-                              <MudChip Size="Size.Small" Color="@(context.Item.CurrentStock > 0 ? Color.Success : Color.Error)">@context.Item.CurrentStock</MudChip>
-                         }
-                    </MudTd>
-                    <MudTd>@context.Qty</MudTd>
-                    <MudTd>@context.Rate</MudTd>
-                    <MudTd>@context.Amount</MudTd>
-                     <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => RemoveLine(context))" Color="Color.Error" Size="Size.Small" />
-                    </MudTd>
-                </RowTemplate>
-                <FooterContent>
-                    <MudTfootRow>
-                        <MudTd>
-                            <MudAutocomplete T="Item" Label="Select Item" Value="tempLineItem" ValueChanged="OnItemSelected" SearchFunc="@SearchItems"
-                                             ToStringFunc="@(i => i == null ? null : i.Name)"
-                                              Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
-                                 <ItemTemplate Context="e">
-                                     <MudText Typo="Typo.body2">
-                                         @e.Name 
-                                         <MudChip Size="Size.Small" Variant="Variant.Text" Color="@(e.CurrentStock > 0 ? Color.Success : Color.Error)">Stk: @e.CurrentStock</MudChip>
-                                     </MudText>
-                                 </ItemTemplate>
-                            </MudAutocomplete>
-                        </MudTd>
-                        <MudTd>
-                             <MudSelect T="int" Value="tempUnitId" ValueChanged="OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(tempLineItem == null)">
-                                 @foreach(var u in availableUnits)
-                                 {
-                                     <MudSelectItem Value="@u.Id">@u.Name</MudSelectItem>
-                                 }
-                             </MudSelect>
-                        </MudTd>
-                         <MudTd>
-                             <!-- Stock Display for Temp Line -->
-                             @if(tempLineItem != null)
-                             {
-                                  <MudText Typo="Typo.body2" Color="@(tempLineItem.CurrentStock > 0 ? Color.Success : Color.Error)">@tempLineItem.CurrentStock</MudText>
-                             }
-                        </MudTd>
-                        <MudTd>
-                            <MudNumericField @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense" TextChanged="CalculateTempAmount" />
-                        </MudTd>
-                        <MudTd>
-                             <MudNumericField @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense" TextChanged="CalculateTempAmount" />
-                        </MudTd>
-                        <MudTd>
-                            <MudText>@tempAmount</MudText>
-                        </MudTd>
-                        <MudTd>
-                             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddLine" Size="Size.Small">Add</MudButton>
-                        </MudTd>
-                    </MudTfootRow>
-                    <MudTfootRow>
-                        <MudTd colspan="5" Class="text-right"><strong>Total:</strong></MudTd>
-                        <MudTd colspan="2"><strong>@invoice.TotalAmount</strong></MudTd>
-                    </MudTfootRow>
-                </FooterContent>
-            </MudTable>
-        </MudItem>
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="px-4 py-4" 
+             ActivePanelIndex="@_activeTabIndex" ActivePanelIndexChanged="OnTabChanged" KeepPanelsAlive="true">
         
-        <MudItem xs="12" Class="d-flex justify-end mt-4">
-             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveInvoice" Disabled="_isProcessing" Class="ml-2">
-                 @if (_isProcessing)
-                 {
-                     <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                     <MudText Class="ms-2">Processing</MudText>
-                 }
-                 else
-                 {
-                     <MudText>Save Invoice</MudText>
-                 }
-             </MudButton>
-        </MudItem>
-    </MudGrid>
-</MudForm>
+        <!-- TAB 1: NEW / EDIT INVOICE -->
+        <MudTabPanel Text="@(invoice.Id == 0 ? "New Invoice" : $"Edit Invoice #{invoice.InvoiceNo}")" Icon="@Icons.Material.Filled.Receipt">
+            <div style="height: calc(100vh - 140px); display: flex; flex-direction: column; overflow: hidden;">
+                <!-- Scrollable Form Area -->
+                <div style="flex: 1; overflow-y: auto; min-height: 0;" class="px-1 py-1">
+                    <MudForm @ref="form" @bind-IsValid="@success">
+
+                        <!-- HEADER CARD -->
+                        <MudCard Elevation="2" Class="mb-3">
+                            <MudCardHeader Class="py-2 px-4" Style="border-bottom: 1px solid #e0e0e0;">
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.subtitle1">
+                                        <b>@(invoice.Id == 0 ? "New Invoice Details" : $"Editing Invoice: {invoice.InvoiceNo}")</b>
+                                    </MudText>
+                                </CardHeaderContent>
+                                <CardHeaderActions>
+                                    <MudButton Variant="Variant.Text" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearInvoice" Size="Size.Small">Clear / New</MudButton>
+                                </CardHeaderActions>
+                            </MudCardHeader>
+                            <MudCardContent Class="py-3 px-4">
+                                <MudGrid Spacing="3">
+                                    <MudItem xs="6" md="2">
+                                        <MudTextField @bind-Value="invoice.InvoiceNo" Label="Invoice No." Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="true" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudDatePicker Label="Date" @bind-Date="invoiceDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    @if (invoice.PaymentTerms != "Cash")
+                                    {
+                                        <MudItem xs="6" md="2">
+                                            <MudDatePicker Label="Due Date" @bind-Date="invoice.DueDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                        </MudItem>
+                                    }
+                                    <MudItem xs="6" md="2">
+                                        <MudSelect T="string" Label="Payment Terms" @bind-Value="invoice.PaymentTerms" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            <MudSelectItem Value="@("Cash")">Cash</MudSelectItem>
+                                            <MudSelectItem Value="@("Credit")">Credit</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudAutocomplete T="Customer" Label="Customer *" @bind-Value="invoice.Customer" SearchFunc="@SearchCustomers"
+                                                         ToStringFunc="@(c => c == null ? null : c.Name)"
+                                                         Required="true" RequiredError="Customer is required."
+                                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         AdornmentIcon="@Icons.Material.Filled.Search"
+                                                         AnchorOrigin="Origin.BottomCenter" Dense="true"
+                                                         Clearable="true" ResetValueOnEmptyText="true">
+                                            <ItemTemplate Context="e">
+                                                <div class="d-flex flex-column pa-1">
+                                                    <MudText Typo="Typo.body2"><b>@e.Name</b></MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@e.Code &bull; @e.Mobile</MudText>
+                                                </div>
+                                            </ItemTemplate>
+                                        </MudAutocomplete>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+
+                        <!-- ENTRY ROW -->
+                        <MudCard Elevation="2" Class="mb-3">
+                            <MudCardContent Class="py-2 px-4">
+                                <MudGrid Spacing="2" Class="align-center">
+                                    <MudItem xs="12" md="3">
+                                        <MudTextField Value="@tempItemName" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                                                      OnAdornmentClick="OpenItemSearch" Placeholder="Click 🔍 to search..." />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudSelect T="int?" Label="Unit" Value="@selectedUnitValue" ValueChanged="@OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            @foreach(var u in tempUnits)
+                                            {
+                                                <MudSelectItem Value="@((int?)u.Value)">@u.DisplayName</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" TextChanged="CalculateAmount" OnKeyDown="OnQtyKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudNumericField @ref="_rateField" @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Format="N2" TextChanged="CalculateAmount" OnKeyDown="OnRateKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @bind-Value="tempDiscPercent" Label="Disc %" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Max="100" TextChanged="@(() => OnDiscPercentChanged(tempDiscPercent))" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudTextField Value="@tempAmount" Label="Net Amount" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Format="N2" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        @if (_editingItem == null)
+                                        {
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddLine" FullWidth="true"
+                                                       Disabled="@(tempItem == null || tempQty <= 0)"
+                                                       StartIcon="@Icons.Material.Filled.Add">Add</MudButton>
+                                        }
+                                        else
+                                        {
+                                            <div class="d-flex flex-column gap-1">
+                                                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="UpdateLine" FullWidth="true"
+                                                           Disabled="@(tempItem == null || tempQty <= 0)"
+                                                           StartIcon="@Icons.Material.Filled.Save"
+                                                           Style="font-weight:bold;">Update</MudButton>
+                                                <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="CancelEdit" FullWidth="true"
+                                                           Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.Cancel">Cancel</MudButton>
+                                            </div>
+                                        }
+                                    </MudItem>
+                                </MudGrid>
+                                @if (tempItem != null)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mt-1" Color="@(tempItem.CurrentStock > 0 ? Color.Success : Color.Warning)">
+                                        <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" Class="mr-1" />
+                                        Available Stock: <b>@tempItem.CurrentStock</b> (base units)
+                                    </MudText>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+
+                        <!-- ITEM GRID -->
+                        @if (_editingItem != null)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2" Icon="@Icons.Material.Filled.Edit">
+                                Editing row: <b>@_editingItem.Item?.Name</b> — Modify fields above and click <b>Update</b>, or click <b>Cancel</b> to discard.
+                            </MudAlert>
+                        }
+                        <MudTable Items="@invoice.SalesInvoiceItems" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2" Class="mb-3">
+                            <HeaderContent>
+                                <MudTh Style="width: 50px;">#</MudTh>
+                                <MudTh Style="width: 40%;">Item</MudTh>
+                                <MudTh>Unit</MudTh>
+                                <MudTh Style="text-align:right;">Qty</MudTh>
+                                <MudTh Style="text-align:right;">Rate</MudTh>
+                                <MudTh Style="text-align:right;">Disc %</MudTh>
+                                <MudTh Style="text-align:right;">Amount</MudTh>
+                                <MudTh Style="width:80px; text-align:center;">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                @{
+                                    bool isEditing = _editingItem == context;
+                                    string rowBg = isEditing ? "background-color: #fff9e6; font-weight: bold;" : "";
+                                    var itemsList = invoice.SalesInvoiceItems.ToList();
+                                    int rowIndex = itemsList.IndexOf(context) + 1;
+                                }
+                                <MudTd Style="@rowBg">@rowIndex</MudTd>
+                                <MudTd DataLabel="Item" Style="@rowBg">
+                                    <div class="d-flex align-center gap-1">
+                                        @if (isEditing)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                                        }
+                                        <div>
+                                            <MudText Typo="Typo.body2"><b>@context.Item?.Name</b></MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Item?.ItemCode</MudText>
+                                        </div>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Unit" Style="@rowBg">@((context.ItemUnit != null && !string.IsNullOrWhiteSpace(context.ItemUnit.Name)) ? context.ItemUnit.Name : context.Unit?.Name)</MudTd>
+                                <MudTd DataLabel="Qty" Style="@($"text-align:right; {rowBg}")">@context.Qty.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Rate" Style="@($"text-align:right; {rowBg}")">@context.Rate.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Disc %" Style="@($"text-align:right; {rowBg}")">@context.DiscountPercent.ToString("0.##")%</MudTd>
+                                <MudTd DataLabel="Amount" Style="@($"text-align:right; {rowBg}")"><b>@context.Amount.ToString("N2")</b></MudTd>
+                                <MudTd Style="@($"text-align:center; {rowBg}")">
+                                    <MudTooltip Text="Edit this row">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                                       OnClick="@(() => EditLine(context))"
+                                                       Disabled="@(_editingItem != null && _editingItem != context)" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Delete this row">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                       OnClick="@(() => RemoveLine(context))"
+                                                       Disabled="@(_editingItem == context)" />
+                                    </MudTooltip>
+                                </MudTd>
+                            </RowTemplate>
+                            <FooterContent>
+                                <MudTfootRow Class="total-row">
+                                    <MudTd colspan="6" Style="text-align:right; font-weight:bold;">Subtotal:</MudTd>
+                                    <MudTd Style="text-align:right; font-weight:bold;">@invoice.SalesInvoiceItems.Sum(x => x.Amount).ToString("N2")</MudTd>
+                                    <MudTd></MudTd>
+                                </MudTfootRow>
+                            </FooterContent>
+                        </MudTable>
+
+                        <!-- TOTALS + NOTES -->
+                        <MudCard Elevation="2" Class="mb-3">
+                            <MudCardContent Class="py-3 px-4">
+                                <MudGrid Spacing="3">
+                                    <!-- Left: Notes -->
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField @bind-Value="invoice.Notes" Label="Notes / Remarks" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" />
+                                    </MudItem>
+
+                                    <!-- Right: Totals Summary -->
+                                    <MudItem xs="12" md="6">
+                                        <MudPaper Outlined="true" Class="pa-0" Style="border-radius: 8px; overflow: hidden;">
+                                            <div class="d-flex justify-space-between align-center px-4 py-2" style="background: #fafafa; border-bottom: 1px solid #e0e0e0;">
+                                                <MudText Typo="Typo.body2" Style="color: #555;">Subtotal</MudText>
+                                                <MudText Typo="Typo.body1"><b>@invoice.SubTotal.ToString("N2")</b></MudText>
+                                            </div>
+                                            <div class="d-flex justify-space-between align-center px-4 py-2" style="background: #fff8f8; border-bottom: 1px solid #e0e0e0;">
+                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                    <MudText Typo="Typo.body2" Style="color: #555; min-width: 60px;">Discount</MudText>
+                                                    <MudNumericField @bind-Value="invoice.DiscountPercent"
+                                                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                     HideSpinButtons="true" Min="0" Max="100"
+                                                                     Adornment="Adornment.End" AdornmentText="%"
+                                                                     Style="width: 100px;"
+                                                                     TextChanged="RecalculateTotals" />
+                                                </div>
+                                                <MudText Typo="Typo.body1" Color="Color.Error"><b>- @invoice.DiscountAmount.ToString("N2")</b></MudText>
+                                            </div>
+                                            <div class="d-flex justify-space-between align-center px-4 py-2" style="background: #f6fff6; border-bottom: 1px solid #e0e0e0;">
+                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                    <MudText Typo="Typo.body2" Style="color: #555; min-width: 60px;">Tax / GST</MudText>
+                                                    <MudNumericField @bind-Value="invoice.TaxPercent"
+                                                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                     HideSpinButtons="true" Min="0" Max="100"
+                                                                     Adornment="Adornment.End" AdornmentText="%"
+                                                                     Style="width: 100px;"
+                                                                     TextChanged="RecalculateTotals" />
+                                                </div>
+                                                <MudText Typo="Typo.body1" Color="Color.Success"><b>+ @invoice.TaxAmount.ToString("N2")</b></MudText>
+                                            </div>
+                                            <div class="d-flex justify-space-between align-center px-4 py-3" style="background: #1565C0;">
+                                                <MudText Typo="Typo.subtitle1" Style="color: white; font-weight: 700; letter-spacing: 0.04em;">GRAND TOTAL</MudText>
+                                                <MudText Typo="Typo.h6" Style="color: white; font-weight: 700;">@invoice.TotalAmount.ToString("N2")</MudText>
+                                            </div>
+                                        </MudPaper>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+
+                    </MudForm>
+                </div>
+
+                <!-- FIXED FOOTER -->
+                <div style="flex: 0 0 auto; border-top: 2px solid #1976d2;" class="px-4 py-2">
+                    <div class="d-flex justify-space-between align-center">
+                        <div class="d-flex align-center gap-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Receipt" Color="Color.Primary" />
+                            <div>
+                                <MudText Typo="Typo.caption">Invoice Total</MudText>
+                                <MudText Typo="Typo.h6" Color="Color.Primary"><b>@invoice.TotalAmount.ToString("N2")</b></MudText>
+                            </div>
+                            @if (invoice.SalesInvoiceItems.Count > 0)
+                            {
+                                <MudChip T="string" Color="Color.Default" Size="Size.Small">@invoice.SalesInvoiceItems.Count item(s)</MudChip>
+                            }
+                        </div>
+                        <div class="d-flex gap-2">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearInvoice"
+                                       StartIcon="@Icons.Material.Filled.ClearAll" Size="Size.Large">
+                                Clear / New
+                            </MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveInvoice"
+                                       Disabled="_isProcessing" StartIcon="@Icons.Material.Filled.Save" Size="Size.Large"
+                                       Style="min-width: 160px; font-weight: bold;">
+                                @if (_isProcessing)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Saving...</span>
+                                }
+                                else
+                                {
+                                    <span>@(invoice.Id == 0 ? "SAVE INVOICE" : "UPDATE INVOICE")</span>
+                                }
+                            </MudButton>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </MudTabPanel>
+
+        <!-- TAB 2: INVOICE HISTORY -->
+        <MudTabPanel Text="Invoice History" Icon="@Icons.Material.Filled.History">
+            <div style="height: calc(100vh - 140px); display: flex; flex-direction: column; overflow: hidden;">
+                <!-- Search / Filter Card -->
+                <div style="flex: 0 0 auto;" class="px-1 py-1">
+                    <MudCard Elevation="2">
+                        <MudCardContent Class="py-2 px-4">
+                            <MudGrid Spacing="2" Class="align-center">
+                                <MudItem xs="12" sm="3">
+                                    <MudTextField @bind-Value="listFilter.InvoiceNo" Label="Invoice No." Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Tag" Placeholder="e.g. INV001"
+                                                  @onkeydown="OnSearchKeyDown" />
+                                </MudItem>
+                                <MudItem xs="12" sm="3">
+                                    <MudTextField @bind-Value="listFilter.CustomerName" Label="Customer" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" Placeholder="Search customer..."
+                                                  @onkeydown="OnSearchKeyDown" />
+                                </MudItem>
+                                <MudItem xs="6" sm="2">
+                                    <MudDatePicker @bind-Date="_listDateFrom" Label="From Date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="6" sm="2">
+                                    <MudDatePicker @bind-Date="_listDateTo" Label="To Date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="12" sm="2" Class="d-flex gap-2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search"
+                                               OnClick="LoadList" FullWidth="true" Size="Size.Small">Search</MudButton>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ClearAll"
+                                               OnClick="ClearListFilter" Size="Size.Small">Clear</MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        </MudCardContent>
+                    </MudCard>
+                </div>
+
+                <!-- Results Summary -->
+                <div style="flex: 0 0 auto;" class="px-4 pb-1 d-flex justify-space-between align-center">
+                    @if (!_listLoading && _listResult != null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Showing <b>@(_listResult.Items.Count)</b> of <b>@_listResult.TotalCount</b> invoices
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Page <b>@_listResult.Page</b> of <b>@_listResult.TotalPages</b>
+                        </MudText>
+                    }
+                </div>
+
+                <!-- List Table -->
+                <div style="flex: 1; overflow-y: auto; min-height: 0;" class="px-1">
+                    @if (_listLoading)
+                    {
+                        <div class="d-flex justify-center align-center" style="height: 200px;">
+                            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                        </div>
+                    }
+                    else if (_listResult?.Items.Count == 0)
+                    {
+                        <MudPaper Elevation="0" Class="d-flex flex-column align-center justify-center pa-8" Style="min-height: 200px; border: 2px dashed #e0e0e0;">
+                            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Tertiary" />
+                            <MudText Typo="Typo.body1" Class="mt-2" Color="Color.Tertiary">No invoices found</MudText>
+                        </MudPaper>
+                    }
+                    else if (_listResult != null)
+                    {
+                        <MudTable Items="@_listResult.Items" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2" FixedHeader="true" Height="100%">
+                            <HeaderContent>
+                                <MudTh>#</MudTh>
+                                <MudTh>Invoice No.</MudTh>
+                                <MudTh>Date</MudTh>
+                                <MudTh>Customer</MudTh>
+                                <MudTh Style="text-align:right;">Total</MudTh>
+                                <MudTh Style="width: 100px; text-align:center;">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                @{
+                                    int rowNum = _listResult.Items.IndexOf(context) + 1 + ((_listResult.Page - 1) * _listResult.PageSize);
+                                }
+                                <MudTd>@rowNum</MudTd>
+                                <MudTd>
+                                    <MudLink Color="Color.Primary" Style="font-weight: bold; cursor: pointer;" OnClick="@(() => LoadInvoiceForEdit(context))">
+                                        @context.InvoiceNo
+                                    </MudLink>
+                                </MudTd>
+                                <MudTd>@context.Date.ToString("dd-MMM-yyyy")</MudTd>
+                                <MudTd>@context.Customer?.Name</MudTd>
+                                <MudTd Style="text-align:right; font-weight: bold; color: #1976d2;">@context.TotalAmount.ToString("N2")</MudTd>
+                                <MudTd Style="text-align:center;">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit"
+                                               OnClick="@(() => LoadInvoiceForEdit(context))">Edit</MudButton>
+                                </MudTd>
+                            </RowTemplate>
+                            <PagerContent>
+                                <MudTablePager />
+                            </PagerContent>
+                        </MudTable>
+                        
+                         <!-- Pagination Footer Custom -->
+                        @if (_listResult.TotalPages > 0)
+                        {
+                            <div style="flex: 0 0 auto; border-top: 1px solid #e0e0e0;" class="px-4 py-2 d-flex justify-center align-center gap-2">
+                                <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Disabled="@(_listResult.Page == 1)" OnClick="@(() => GoToPage(1))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="@(_listResult.Page == 1)" OnClick="@(() => GoToPage(_listResult.Page - 1))" />
+                                <MudText Typo="Typo.caption">Page @_listResult.Page of @_listResult.TotalPages</MudText>
+                                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="@(_listResult.Page >= _listResult.TotalPages)" OnClick="@(() => GoToPage(_listResult.Page + 1))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.LastPage" Disabled="@(_listResult.Page >= _listResult.TotalPages)" OnClick="@(() => GoToPage(_listResult.TotalPages))" />
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </MudTabPanel>
+    </MudTabs>
+</div>
 
 @code {
-    private SalesInvoice invoice = new SalesInvoice();
+    private int _activeTabIndex = 0;
+
+    // ────────── NEW / EDIT INVOICE STATE ──────────
+    private InvoiceEntity invoice = new InvoiceEntity();
     private DateTime? invoiceDate = DateTime.Now;
     private bool success;
     private MudForm form;
     private bool _isProcessing = false;
-
-    // Temp Line Variables
-    private Item tempLineItem;
-    private int tempUnitId;
-    private decimal tempQty = 1;
-    private decimal tempRate;
-    private decimal tempAmount;
-    private List<Unit> availableUnits = new List<Unit>();
+    private InvoiceItemEntity? _editingItem = null; 
 
     // Cache
     private List<Customer> customers = new List<Customer>();
-    private List<Item> items = new List<Item>();
     private List<Unit> allUnits = new List<Unit>();
+
+    // Entry Row Variables
+    private Item? tempItem;
+    private string tempItemName = "";
+    private int? selectedUnitValue;
+    private List<UnitDisplay> tempUnits = new List<UnitDisplay>();
+    private decimal tempQty = 0;
+    private decimal tempRate = 0;
+    private decimal tempDiscPercent = 0;
+    private decimal tempDiscAmount = 0;
+    private decimal tempAmount = 0;
+
+    private MudNumericField<decimal> _rateField;
+
+    public class UnitDisplay
+    {
+        public int Value { get; set; }
+        public int UnitId { get; set; }
+        public string DisplayName { get; set; }
+        public decimal Multiplier { get; set; }
+        public int? ItemUnitId { get; set; }
+    }
+
+    // ────────── LIST STATE ──────────
+    private InvoiceSearchRequest listFilter = new() { PageSize = 15 };
+    private DateTime? _listDateFrom;
+    private DateTime? _listDateTo;
+    private PagedResult<InvoiceEntity>? _listResult;
+    private bool _listLoading = false;
+
+    // ────────── LIFECYCLE ──────────
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadData();
-        invoice.InvoiceNo = $"INV-{DateTime.Now:yyyyMMddHHmm}"; // Simple Auto Gen
+        await LoadCacheData();
+        await InitializeNewInvoiceAsync();
+        // Don't load list immediately, wait for tab switch or user action? 
+        // Or load it now. Let's load it now.
+        await LoadList(); 
     }
 
-    private async Task LoadData()
+    private void OnTabChanged(int index)
     {
-        try 
+        _activeTabIndex = index;
+    }
+
+    private async Task InitializeNewInvoiceAsync()
+    {
+        try
         {
-            var cTask = CustomerService.GetAllCustomersAsync();
-            var iTask = ItemService.GetAllItemsAsync();
-            var uTask = UnitService.GetAllUnitsAsync();
-            await Task.WhenAll(cTask, iTask, uTask);
+            invoice = new InvoiceEntity(); // Reset ID to 0
+            invoice.InvoiceNo = await SalesService.GetNextInvoiceNumber();
+        }
+        catch
+        {
+            invoice.InvoiceNo = $"INV-{DateTime.Now:yyyyMMddHHmmss}";
+        }
+
+        invoice.PaymentTerms = "Cash";
+        invoiceDate = DateTime.Now;
+        invoice.DueDate = DateTime.Now;
+        
+        // Default Customer
+        if (customers.Any())
+        {
+            var defaultCustomer = customers.FirstOrDefault(c => c.Code == "C1000") 
+                               ?? customers.FirstOrDefault(c => c.Name.Contains("Cash", StringComparison.OrdinalIgnoreCase));
             
-            customers = cTask.Result;
-            items = iTask.Result;
-            allUnits = uTask.Result;
+            if (defaultCustomer != null)
+            {
+                invoice.Customer = defaultCustomer;
+                invoice.CustomerId = defaultCustomer.Id;
+            }
+        }
+
+        invoice.SalesInvoiceItems = new List<InvoiceItemEntity>();
+        
+        // Reset Entry
+        CancelEdit();
+    }
+
+    private async Task LoadCacheData()
+    {
+        try
+        {
+            var t1 = CustomerService.GetAllCustomersAsync();
+            var t2 = UnitService.GetAllUnitsAsync();
+            await Task.WhenAll(t1, t2);
+            customers = t1.Result;
+            allUnits = t2.Result;
         }
         catch (Exception ex)
         {
-             Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
         }
     }
+
+    // ────────── LIST METHODS ──────────
+
+    private async Task LoadList()
+    {
+        _listLoading = true;
+        try
+        {
+            listFilter.DateFrom = _listDateFrom;
+            listFilter.DateTo = _listDateTo;
+            _listResult = await SalesService.GetInvoicesAsync(listFilter);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading list: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _listLoading = false;
+        }
+    }
+
+    private async Task ClearListFilter()
+    {
+        listFilter = new InvoiceSearchRequest { PageSize = listFilter.PageSize };
+        _listDateFrom = null;
+        _listDateTo = null;
+        await LoadList();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        listFilter.Page = page;
+        await LoadList();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            listFilter.Page = 1;
+            await LoadList();
+        }
+    }
+
+    // ────────── LOAD FOR EDIT LOGIC ──────────
+
+    private async Task LoadInvoiceForEdit(InvoiceEntity selectedInvoice)
+    {
+        // 1. Check if current invoice has unsaved changes (has items and ID=0 (new) or ID!=0 (editing another))
+        if (invoice.SalesInvoiceItems.Any())
+        {
+            bool? result = await DialogService.ShowMessageBox(
+                "Unsaved Changes",
+                "You have unsaved changes in the current invoice. Loading another invoice will discard these changes. Continue?",
+                yesText: "Discard & Load", cancelText: "Cancel");
+
+            if (result != true) return;
+        }
+
+        try
+        {
+            // 2. Clone the selected invoice to avoid reference issues with the list
+            // Or re-fetch from DB to ensure we have all fields/items if list is partial
+             // Since list items might not have all details if projection was used, but currently it's full entity.
+            // However, to be safe and get fresh state, let's assume usage of list object is okay for now as it includes items.
+            // We need a DEEP COPY to avoid modifying the list item directly in UI before save.
+            
+            // Re-fetching is safer. Since we don't have GetById, we can search by ID or just use the object if untracked.
+            // Using JSON serialization for deep copy is a quick hack, or manual mapping.
+            // Let's manually map for safety.
+            
+            var newInv = new InvoiceEntity 
+            {
+                Id = selectedInvoice.Id,
+                InvoiceNo = selectedInvoice.InvoiceNo,
+                Date = selectedInvoice.Date,
+                DueDate = selectedInvoice.DueDate,
+                PaymentTerms = selectedInvoice.PaymentTerms,
+                CustomerId = selectedInvoice.CustomerId,
+                Customer = customers.FirstOrDefault(c => c.Id == selectedInvoice.CustomerId), // Link to cached customer
+                Notes = selectedInvoice.Notes,
+                SubTotal = selectedInvoice.SubTotal,
+                DiscountPercent = selectedInvoice.DiscountPercent,
+                DiscountAmount = selectedInvoice.DiscountAmount,
+                TaxPercent = selectedInvoice.TaxPercent,
+                TaxAmount = selectedInvoice.TaxAmount,
+                TotalAmount = selectedInvoice.TotalAmount,
+                SalesInvoiceItems = new List<InvoiceItemEntity>()
+            };
+
+            if (selectedInvoice.SalesInvoiceItems != null)
+            {
+                foreach (var item in selectedInvoice.SalesInvoiceItems)
+                {
+                    newInv.SalesInvoiceItems.Add(new InvoiceItemEntity
+                    {
+                        Id = item.Id, // Keep ID for update
+                        SalesInvoiceId = item.SalesInvoiceId,
+                        ItemId = item.ItemId,
+                        Item = item.Item, // Reference is fine
+                        UnitId = item.UnitId,
+                        Unit = item.Unit,
+                        Qty = item.Qty,
+                        Rate = item.Rate,
+                        DiscountPercent = item.DiscountPercent,
+                        DiscountAmount = item.DiscountAmount,
+                        Amount = item.Amount,
+                        QtyInBaseUnit = item.QtyInBaseUnit
+                    });
+                }
+            }
+
+            // 3. Set to active
+            invoice = newInv;
+            invoiceDate = invoice.Date; // Bind date
+            
+            // 4. Switch Tab
+            _activeTabIndex = 0;
+            CancelEdit(); // Reset entry row
+            StateHasChanged();
+
+            Snackbar.Add($"Invoice {invoice.InvoiceNo} loaded for editing.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading invoice: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ────────── INVOICE ENTRY METHODS ──────────
 
     private async Task<IEnumerable<Customer>> SearchCustomers(string value, CancellationToken token)
     {
         if (string.IsNullOrEmpty(value)) return customers;
-        return customers.Where(x => x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+        return customers.Where(x =>
+            x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase) ||
+            x.Code.Contains(value, StringComparison.InvariantCultureIgnoreCase));
     }
 
-    private async Task<IEnumerable<Item>> SearchItems(string value, CancellationToken token)
+    private async Task OpenItemSearch()
     {
-        if (string.IsNullOrEmpty(value)) return items;
-        // In a real app, optimize this to simple check
-        return items.Where(x => x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase) 
-                             || x.ItemCode.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = DialogService.Show<ItemSearchDialog>("Search Item", options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Item item)
+            await OnItemSelected(item);
     }
 
-    // Logic for Unit Change
-    private async void OnItemSelected(Item item)
+    private async Task OnItemSelected(Item item)
     {
-        tempLineItem = item;
-        if (item == null) 
-        {
-            availableUnits.Clear();
-            return;
-        }
+        tempItem = item;
+        tempItemName = $"{item.ItemCode} - {item.Name}";
+        tempQty = 1;
+        tempRate = item.Rate;
+        tempDiscPercent = 0;
+        tempDiscAmount = 0;
 
-        // Prepare Available Units: Base + MultiUnits
-        availableUnits = new List<Unit>();
-        
-        // 1. Add Base Unit
-        var baseUnit = allUnits.FirstOrDefault(u => u.Id == item.UnitId);
-        if (baseUnit != null) availableUnits.Add(baseUnit);
+        tempUnits.Clear();
+        if (item.BaseUnit != null)
+            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null });
 
-        // 2. Add Multi Units
-        if (item.IsMultiUnit && item.ItemUnits != null)
+        if (item.ItemUnits != null)
         {
-            foreach(var iu in item.ItemUnits)
+            foreach (var iu in item.ItemUnits)
             {
-                var u = allUnits.FirstOrDefault(un => un.Id == iu.UnitId);
-                if(u != null && !availableUnits.Any(x => x.Id == u.Id)) availableUnits.Add(u);
+                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
             }
         }
 
-        // Default Select Base Unit
-        if (availableUnits.Any())
+        if (tempUnits.Any())
         {
-            tempUnitId = availableUnits.First().Id;
-            tempRate = item.Rate; // Default Base Rate
+            var baseUnit = tempUnits.FirstOrDefault(u => u.Value < 0);
+            selectedUnitValue = baseUnit?.Value ?? tempUnits.First().Value;
+            await OnUnitChanged(selectedUnitValue);
+            StateHasChanged();
         }
-        else
-        {
-            tempUnitId = 0;
-            tempRate = 0;
-        }
-        
-        CalculateTempAmount();
-        StateHasChanged();
     }
 
-    private void OnUnitChanged(int unitId)
+    private async Task OnUnitChanged(int? value)
     {
-        tempUnitId = unitId;
-        if (tempLineItem == null) return;
+        selectedUnitValue = value;
+        if (tempItem == null || value == null) return;
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == value);
+        if (selectedUnit != null)
+            tempRate = tempItem.Rate * selectedUnit.Multiplier;
+        CalculateAmount();
+    }
 
-        // Check if Base Unit
-        if (unitId == tempLineItem.UnitId)
-        {
-            tempRate = tempLineItem.Rate;
-        }
-        // Check if Multi Unit
-        else if (tempLineItem.ItemUnits != null)
-        {
-            var iu = tempLineItem.ItemUnits.FirstOrDefault(x => x.UnitId == unitId);
-            if (iu != null)
-            {
-                tempRate = iu.Rate;
-            }
-        }
-        CalculateTempAmount();
-    }
-    
-    // Workaround for MudNumericField TextChanged requiring specific signature or purely binding
-    private void CalculateTempAmount()
+    private void OnDiscPercentChanged(decimal percent)
     {
-         // Recalculate based on binded values
-         // Wait for binding to update?
-         // Actually TextChanged doesn't pass value automatically in older versions, 
-         // but @bind:after or setter logic is better. Here we just strictly calculate on Add or UI refresh.
-         // Let's use Property binding logic? No, simple method called by events.
-         tempAmount = tempQty * tempRate;
+        var gross = tempQty * tempRate;
+        tempDiscAmount = gross * (percent / 100);
+        CalculateAmount();
     }
-    
-    // We can also use setters
-    // But for now, let's just ensure AddLine recalculates to be safe.
+
+    private void CalculateAmount()
+    {
+        var gross = tempQty * tempRate;
+        tempDiscAmount = gross * (tempDiscPercent / 100);
+        tempAmount = gross - tempDiscAmount;
+    }
+
+    private void RecalculateTotals()
+    {
+        invoice.SubTotal = invoice.SalesInvoiceItems.Sum(x => x.Amount);
+        invoice.DiscountAmount = invoice.SubTotal * (invoice.DiscountPercent / 100);
+        invoice.TaxAmount = (invoice.SubTotal - invoice.DiscountAmount) * (invoice.TaxPercent / 100);
+        invoice.TotalAmount = invoice.SubTotal - invoice.DiscountAmount + invoice.TaxAmount;
+    }
+
+    private void RecalculateTotals(decimal value) => RecalculateTotals();
+
+    private async Task OnQtyKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            if (_rateField != null) await _rateField.FocusAsync();
+    }
+
+    private void OnRateKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            AddLine();
+    }
 
     private void AddLine()
     {
-        CalculateTempAmount(); 
-        if (tempLineItem == null || tempUnitId == 0 || tempQty <= 0)
-        {
-            Snackbar.Add("Invalid Line Item", Severity.Warning);
-            return;
-        }
+        if (tempItem == null || selectedUnitValue == null || tempQty <= 0) return;
 
-        // Calculate QtyInBaseUnit for Stock
-        decimal qtyInBase = tempQty;
-        if (tempUnitId != tempLineItem.UnitId) // Not Base
-        {
-             var iu = tempLineItem.ItemUnits?.FirstOrDefault(u => u.UnitId == tempUnitId);
-             if (iu != null)
-             {
-                 qtyInBase = tempQty * iu.QtyPerBaseUnit;
-             }
-        }
+        var selectedUnit = tempUnits.First(u => u.Value == selectedUnitValue);
+        decimal qtyInBase = tempQty * selectedUnit.Multiplier;
 
-        var line = new SalesInvoiceItem
+        invoice.SalesInvoiceItems.Add(new InvoiceItemEntity
         {
-            ItemId = tempLineItem.Id,
-            Item = tempLineItem, // Keep reference for display
-            UnitId = tempUnitId,
-            Unit = availableUnits.FirstOrDefault(u => u.Id == tempUnitId),
+            ItemId = tempItem.Id,
+            Item = tempItem,
+            UnitId = selectedUnit.UnitId,
+            Unit = allUnits.FirstOrDefault(u => u.Id == selectedUnit.UnitId),
+            ItemUnitId = selectedUnit.ItemUnitId, // Save the specific Multi-Unit ID
+            ItemUnit = selectedUnit.ItemUnitId.HasValue ? tempItem.ItemUnits.FirstOrDefault(iu => iu.Id == selectedUnit.ItemUnitId) : null, // Set Nav Prop
             Qty = tempQty,
             Rate = tempRate,
-            Amount = tempQty * tempRate,
+            DiscountPercent = tempDiscPercent,
+            DiscountAmount = tempDiscAmount,
+            Amount = tempAmount,
             QtyInBaseUnit = qtyInBase
-        };
+        });
 
-        invoice.SalesInvoiceItems.Add(line);
-        UpdateTotal();
-        
-        // Reset Temp
-        tempLineItem = null;
-        tempUnitId = 0;
-        tempQty = 1;
-        tempRate = 0;
-        tempAmount = 0;
-        availableUnits.Clear();
+        RecalculateTotals();
+
+        // Reset
+        tempItem = null; tempItemName = ""; selectedUnitValue = null;
+        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
     }
 
-    private void RemoveLine(SalesInvoiceItem item)
+    private void RemoveLine(InvoiceItemEntity item)
     {
         invoice.SalesInvoiceItems.Remove(item);
-        UpdateTotal();
+        RecalculateTotals();
     }
 
-    private void UpdateTotal()
+    private void EditLine(InvoiceItemEntity item)
     {
-        invoice.TotalAmount = invoice.SalesInvoiceItems.Sum(x => x.Amount);
+        _editingItem = item;
+
+        // Load item's data into the entry row
+        tempItem = item.Item;
+        tempItemName = item.Item != null ? $"{item.Item.ItemCode} - {item.Item.Name}" : "";
+        tempQty = item.Qty;
+        tempRate = item.Rate;
+        tempDiscPercent = item.DiscountPercent;
+        tempDiscAmount = item.DiscountAmount;
+        tempAmount = item.Amount;
+
+        // Rebuild units list for this item
+        tempUnits.Clear();
+        if (item.Item?.BaseUnit != null)
+            tempUnits.Add(new UnitDisplay
+            {
+                Value = -item.Item.UnitId,
+                UnitId = item.Item.UnitId,
+                DisplayName = item.Item.BaseUnit.Name,
+                Multiplier = 1,
+                ItemUnitId = null
+            });
+
+        if (item.Item?.ItemUnits != null)
+        {
+            foreach (var iu in item.Item.ItemUnits)
+            {
+                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+            }
+        }
+
+        // Try to select the unit that matches the saved row
+        // STRICT MATCH: Use ItemUnitId if available
+        UnitDisplay matchedUnit = null;
+
+        if (item.ItemUnitId.HasValue)
+        {
+            matchedUnit = tempUnits.FirstOrDefault(u => u.ItemUnitId == item.ItemUnitId);
+        }
+        else
+        {
+            // Fallback for old data or Base Unit (which has null ItemUnitId)
+            // If it's Base Unit, we expect ItemUnitId to be null, so check for null ItemUnitId in tempUnits (Value < 0 in our logic usually)
+            // But we can check UnitId + ItemUnitId==null
+            matchedUnit = tempUnits.FirstOrDefault(u => u.UnitId == item.UnitId && u.ItemUnitId == null);
+        }
+
+        selectedUnitValue = matchedUnit?.Value ?? (tempUnits.Any() ? tempUnits.First().Value : (int?)null);
+
+        StateHasChanged();
+    }
+
+    private void UpdateLine()
+    {
+        if (_editingItem == null || tempItem == null || tempQty <= 0) return;
+
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == selectedUnitValue);
+        if (selectedUnit == null) return;
+
+        decimal qtyInBase = tempQty * selectedUnit.Multiplier;
+
+        // Update the row in-place
+        // Update the row in-place
+        _editingItem.ItemId = tempItem.Id;
+        _editingItem.Item = tempItem;
+        _editingItem.UnitId = selectedUnit.UnitId;
+        _editingItem.Unit = allUnits.FirstOrDefault(u => u.Id == selectedUnit.UnitId);
+        _editingItem.ItemUnitId = selectedUnit.ItemUnitId; // Update Multi-Unit ID
+        _editingItem.ItemUnit = selectedUnit.ItemUnitId.HasValue ? tempItem.ItemUnits.FirstOrDefault(iu => iu.Id == selectedUnit.ItemUnitId) : null; // Set Nav Prop for Grid Display
+        _editingItem.Qty = tempQty;
+        _editingItem.Rate = tempRate;
+        _editingItem.DiscountPercent = tempDiscPercent;
+        _editingItem.DiscountAmount = tempDiscAmount;
+        _editingItem.Amount = tempAmount;
+        _editingItem.QtyInBaseUnit = qtyInBase;
+
+        RecalculateTotals();
+        CancelEdit();
+    }
+
+    private void CancelEdit()
+    {
+        _editingItem = null;
+        tempItem = null; tempItemName = ""; selectedUnitValue = null;
+        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
+        StateHasChanged();
+    }
+
+    private async Task ClearInvoice()
+    {
+        // Warn if clearing pending changes?
+        CancelEdit();
+        await InitializeNewInvoiceAsync();
+        Snackbar.Add("New invoice ready.", Severity.Info);
     }
 
     private async Task SaveInvoice()
     {
-        form.Validate();
-        if (!success) return;
-        if (!invoice.SalesInvoiceItems.Any()) 
-        {
-            Snackbar.Add("Please add at least one item.", Severity.Warning);
-            return;
-        }
+        await form.Validate();
+        if (!success) { Snackbar.Add("Please fix validation errors.", Severity.Warning); return; }
+        if (!invoice.SalesInvoiceItems.Any()) { Snackbar.Add("Please add at least one item.", Severity.Warning); return; }
 
         _isProcessing = true;
         try
         {
             invoice.Date = invoiceDate ?? DateTime.Now;
+            if (invoice.Customer == null) { Snackbar.Add("Customer is required.", Severity.Error); return; }
             invoice.CustomerId = invoice.Customer.Id;
-            invoice.Customer = null; // Clear nav property to avoid tracking issues if attached
-            
-            // Clean up Line Items Nav properties to avoid EF trying to re-add them
-            foreach(var line in invoice.SalesInvoiceItems) 
+
+            // Detach nav props before save
+            // Note: For Update, we might need to be careful with EF not tracking the detached entities if using same context,
+            // but here we are sending to API/Service which creates new context.
+            invoice.Customer = null;
+            foreach (var line in invoice.SalesInvoiceItems)
             {
                 line.Item = null;
                 line.Unit = null;
             }
 
-            await SalesService.CreateInvoice(invoice);
-            Snackbar.Add("Invoice Saved Successfully!", Severity.Success);
-            NavigationManager.NavigateTo("/sales-invoice", true); // Reload for fresh state
+            if (invoice.Id == 0)
+            {
+                await SalesService.CreateInvoice(invoice);
+                Snackbar.Add("✅ Invoice saved successfully!", Severity.Success);
+            }
+            else
+            {
+                bool? result = await DialogService.ShowMessageBox(
+                    "Confirm Update",
+                    "This invoice has already been saved. Are you sure you want to update it?",
+                    yesText: "Update", cancelText: "Cancel");
+
+                if (result != true)
+                {
+                    _isProcessing = false;
+                    return;
+                }
+
+                await SalesService.UpdateInvoice(invoice);
+                Snackbar.Add("✅ Invoice updated successfully!", Severity.Success);
+            }
+
+            // Reload list and reset
+            await InitializeNewInvoiceAsync();
+            await LoadList(); // Refresh history
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-             // Re-load data to restore UI state if needed, or simply let user retry
+            Snackbar.Add($"Error saving invoice: {ex.Message}", Severity.Error);
         }
         finally
         {

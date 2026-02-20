@@ -17,7 +17,7 @@ public class CustomerService : ICustomerService
     public async Task<List<Customer>> GetAllCustomersAsync()
     {
         using var context = await _contextFactory.CreateDbContextAsync();
-        return await context.Customers.Where(c => c.IsActive).ToListAsync();
+        return await context.Customers.ToListAsync();
     }
 
     public async Task<Customer?> GetCustomerByIdAsync(int id)

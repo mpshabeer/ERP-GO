@@ -1,0 +1,106 @@
+@using ERPGODomain.Entities
+@using ERPGOAPPLICATION.Interfaces
+@inject IItemService ItemService
+@inject ICategoryService CategoryService
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudSelect T="int?" Label="Category" @bind-Value="selectedCategoryId" SelectedValuesChanged="OnCategoryChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    @foreach (var cat in categories)
+                    {
+                        <MudSelectItem Value="@((int?)cat.Id)">@cat.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="8">
+                <MudTextField @bind-Value="searchString" Label="Search Item (Name/Code)" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" TextChanged="OnSearch" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12">
+                 <MudTable Items="@filteredItems" Hover="true" Dense="true" Bordered="true" Striped="true" OnRowClick="OnRowClick" T="Item">
+                    <HeaderContent>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Category</MudTh>
+                        <MudTh>Base Unit</MudTh>
+                        <MudTh>Stock</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.ItemCode</MudTd>
+                        <MudTd>@context.Name</MudTd>
+                        <MudTd>@context.Category?.Name</MudTd>
+                        <MudTd>@context.BaseUnit?.Name</MudTd>
+                        <MudTd>@context.CurrentStock</MudTd>
+                    </RowTemplate>
+                     <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    private List<Item> allItems = new List<Item>();
+    private List<Item> filteredItems = new List<Item>();
+    private List<Category> categories = new List<Category>();
+    
+    private string searchString;
+    private int? selectedCategoryId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var itemsTask = ItemService.GetAllItemsAsync();
+        var categoriesTask = CategoryService.GetAllCategoriesAsync();
+
+        await Task.WhenAll(itemsTask, categoriesTask);
+        
+        allItems = await itemsTask;
+        categories = await categoriesTask;
+        filteredItems = allItems;
+    }
+
+    private void OnCategoryChanged()
+    {
+        FilterItems();
+    }
+
+    private void OnSearch()
+    {
+        FilterItems();
+    }
+
+    private void FilterItems()
+    {
+        var query = allItems.AsEnumerable();
+
+        if (selectedCategoryId.HasValue)
+        {
+            query = query.Where(x => x.CategoryId == selectedCategoryId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchString))
+        {
+            query = query.Where(x => 
+                (x.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (x.ItemCode?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            );
+        }
+
+        filteredItems = query.ToList();
+    }
+
+    private void OnRowClick(TableRowClickEventArgs<Item> args)
+    {
+        MudDialog.Close(DialogResult.Ok(args.Item));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

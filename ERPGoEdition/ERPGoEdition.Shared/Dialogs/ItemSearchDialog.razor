@@ -1,0 +1,75 @@
+@using ERPGODomain.Entities
+@using ERPGOAPPLICATION.Interfaces
+@inject IItemService ItemService
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="searchString" Placeholder="Search by Name, Code or Barcode" 
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" 
+                              Immediate="true" TextChanged="@(s => OnSearch(s))" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTable Items="@items" Hover="true" Dense="true" Bordered="true" Striped="true" 
+                          Elevation="0" Height="400px" FixedHeader="true" OnRowClick="OnRowClick" T="Item">
+                    <HeaderContent>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Category</MudTh>
+                        <MudTh>Base Unit</MudTh>
+                        <MudTh>System Stock</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.ItemCode</MudTd>
+                        <MudTd>@context.Name</MudTd>
+                        <MudTd>@context.Category?.Name</MudTd>
+                        <MudTd>@context.BaseUnit?.Name</MudTd>
+                        <MudTd>@context.CurrentStock</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    private string searchString = "";
+    private List<Item> allItems = new List<Item>();
+    private List<Item> items = new List<Item>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        allItems = await ItemService.GetAllItemsAsync();
+        items = allItems;
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            items = allItems;
+        }
+        else
+        {
+            items = allItems.Where(x => 
+                (x.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false) || 
+                (x.ItemCode?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (x.Barcode?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            ).ToList();
+        }
+    }
+
+    private void OnRowClick(TableRowClickEventArgs<Item> args)
+    {
+        MudDialog.Close(DialogResult.Ok(args.Item));
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,259 @@
+@page "/category-master"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@inject ICategoryService CategoryService
+@inject IUnitService UnitService
+@inject IAppSettingsService AppSettingsService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-2" Style="height: calc(100vh - 80px); overflow: hidden;">
+    <MudGrid Spacing="2" Class="h-100">
+        <!-- LEFT SIDEBAR: LIST -->
+        <MudItem xs="12" md="3" Class="d-flex flex-column h-100 pr-2" Style="border-right: 1px solid #e0e0e0;">
+            <!-- Toolbar -->
+             <MudPaper Elevation="0" Class="pa-2 mb-2 d-flex align-center gap-2">
+                 <MudTextField @bind-Value="searchString" Placeholder="Search..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyUp="FilterCategories" FullWidth="true"/>
+                 <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadData" Size="Size.Small"/>
+             </MudPaper>
+            
+            <MudPaper Elevation="0" Class="flex-grow-1 overflow-auto">
+                <MudList T="Category" Clickable="true" SelectedValue="selectedCategory" SelectedValueChanged="OnCategorySelected" Dense="true" DisablePadding="true">
+                    @foreach (var cat in FilteredCategories)
+                    {
+                        <MudListItem Value="@cat" Class="py-2 border-bottom">
+                            <div class="d-flex justify-space-between align-center">
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">@cat.Name</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@cat.Code</MudText>
+                                </div>
+                                <div>
+                                    @if (!cat.IsActive)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" Class="mt-1" Style="font-size: 8px; height: 16px;">Inactive</MudChip>
+                                    }
+                                </div>
+                            </div>
+                        </MudListItem>
+                    }
+                    @if (!FilteredCategories.Any())
+                    {
+                         <MudText Typo="Typo.caption" Class="pa-4 d-block text-center">No categories found.</MudText>
+                    }
+                </MudList>
+            </MudPaper>
+        </MudItem>
+
+        <!-- RIGHT MAIN CONTENT: FORM -->
+        <MudItem xs="12" md="9" Class="h-100 d-flex flex-column">
+            <!-- Action Bar -->
+            <MudPaper Elevation="1" Class="pa-2 mb-3 d-flex align-center gap-2 rounded-lg">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateNewCategory">New Category</MudButton>
+                <MudSpacer />
+                @if (currentCategory.Id > 0)
+                {
+                     @if(currentCategory.IsActive)
+                     {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="@(() => DeleteCategory(currentCategory.Id))">Deactivate</MudButton>
+                     }
+                     else
+                     {
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Restore" OnClick="@(() => RestoreCategory(currentCategory))">Restore</MudButton>
+                     }
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveCategory" Disabled="@_isProcessing">
+                    @if (_isProcessing) { <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/> <span class="ml-2">Saving...</span> } else { <span>Save Changes</span> }
+                </MudButton>
+            </MudPaper>
+
+            <!-- Form Content -->
+            <MudPaper Elevation="2" Class="flex-grow-1 pa-4 overflow-auto rounded-lg">
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudGrid>
+                        <MudItem xs="8">
+                            <MudTextField T="string" Label="Category Name" @bind-Value="currentCategory.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" Style="font-size: 1.2rem; font-weight: 500;" />
+                        </MudItem>
+                         <MudItem xs="4">
+                            <MudTextField T="string" Label="Category Code" @bind-Value="currentCategory.Code" Required="true" RequiredError="Code is required." Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Manual Entry" />
+                        </MudItem>
+                        <MudItem xs="12">
+                             <MudCheckBox T="bool" Label="Active" @bind-Value="currentCategory.IsActive" Color="Color.Success" />
+                        </MudItem>
+                        <MudItem xs="12">
+                             <MudSelect T="int?" Label="Default Unit (Optional)" @bind-Value="currentCategory.DefaultUnitId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" HelperText="Auto-selects this unit in Item Master">
+                                @foreach (var unit in Units)
+                                {
+                                    <MudSelectItem T="int?" Value="@unit.Id">@unit.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                </MudForm>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private List<Category> Categories = new List<Category>();
+    private List<Unit> Units = new List<Unit>();
+    private List<Category> FilteredCategories = new List<Category>();
+    
+    private Category currentCategory = new Category { IsActive = true };
+    private Category selectedCategory;
+    
+    private string searchString = "";
+    private bool success;
+    private MudForm form;
+    private bool _isProcessing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        await CreateNewCategory();
+    }
+
+    private async Task LoadData()
+    {
+        try 
+        {
+            Categories = await CategoryService.GetAllCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error loading categories: {ex.Message}");
+             Categories = new List<Category>();
+             Snackbar.Add("Warning: Could not load categories. Please check database connection.", Severity.Warning);
+        }
+
+        try
+        {
+            Units = await UnitService.GetAllUnitsAsync();
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error loading units: {ex.Message}");
+             Units = new List<Unit>();
+        }
+        
+        FilterCategories();
+    }
+    
+    private void FilterCategories()
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            FilteredCategories = Categories.OrderBy(c => c.Name).ToList();
+        }
+        else
+        {
+            FilteredCategories = Categories.Where(c => 
+                (c.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.Code?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            ).OrderBy(c => c.Name).ToList();
+        }
+        StateHasChanged();
+    }
+
+    private async Task OnCategorySelected(Category category)
+    {
+        if (category != null)
+        {
+            selectedCategory = category;
+            await EditCategory(category);
+        }
+    }
+
+    private async Task CreateNewCategory()
+    {
+        selectedCategory = null; 
+        currentCategory = new Category { IsActive = true };
+        form?.ResetValidation();
+    }
+
+    private async Task EditCategory(Category category)
+    {
+        currentCategory = new Category 
+        { 
+            Id = category.Id, 
+            Name = category.Name, 
+            Code = category.Code,
+            DefaultUnitId = category.DefaultUnitId,
+            IsActive = category.IsActive
+        };
+        form?.ResetValidation();
+    }
+
+    private async Task SaveCategory()
+    {
+        form.Validate();
+        if (!success) return;
+
+        // Validation: Unique Name
+        if (Categories.Any(c => c.Id != currentCategory.Id && c.Name.Equals(currentCategory.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            Snackbar.Add("Category Name already exists.", Severity.Warning);
+            return;
+        }
+
+        // Validation: Unique Code (if provided)
+        if (!string.IsNullOrWhiteSpace(currentCategory.Code) && 
+            Categories.Any(c => c.Id != currentCategory.Id && 
+                                c.Code != null && 
+                                c.Code.Equals(currentCategory.Code, StringComparison.OrdinalIgnoreCase)))
+        {
+            Snackbar.Add("Category Code already exists.", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        try
+        {
+            if (currentCategory.Id == 0)
+            {
+                var newCat = await CategoryService.AddCategoryAsync(currentCategory);
+                Snackbar.Add("Category saved successfully", Severity.Success);
+                await CreateNewCategory(); // Clear form
+            }
+            else
+            {
+                await CategoryService.UpdateCategoryAsync(currentCategory);
+                Snackbar.Add("Category updated successfully", Severity.Success);
+                await CreateNewCategory(); // Clear form
+            }
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving category: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task DeleteCategory(int id)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Delete Category", 
+            "Are you sure you want to deactivate this category?", 
+            yesText:"Deactivate", cancelText:"Cancel");
+
+        if (result == true)
+        {
+            await CategoryService.DeleteCategoryAsync(id);
+            await LoadData();
+            await CreateNewCategory();
+            Snackbar.Add("Category deactivated", Severity.Success);
+        }
+    }
+
+    private async Task RestoreCategory(Category category)
+    {
+        category.IsActive = true;
+        await CategoryService.UpdateCategoryAsync(category);
+        await LoadData();
+        Snackbar.Add("Category restored", Severity.Success);
+    }
+}

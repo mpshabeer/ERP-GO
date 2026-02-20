@@ -1,0 +1,501 @@
+@page "/opening-stock-entry"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@using ERPGODomain.DTOs
+@using ERPGoEdition.Shared.Dialogs
+@inject IStockService StockService
+@inject IItemService ItemService
+@inject IUnitService UnitService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+
+<MudText Typo="Typo.h5" GutterBottom="true">Opening Stock Entry</MudText>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <MudTabPanel Text="New / Update Entry">
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudGrid Spacing="2">
+                <!-- Header -->
+                <MudItem xs="12">
+                     <MudCard Elevation="2" Class="mb-3">
+                         <MudCardContent Class="py-3 px-4">
+                             <MudGrid Spacing="3">
+                                 <MudItem xs="6" md="3">
+                                      <MudDatePicker Label="Date" @bind-Date="entryDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                 </MudItem>
+                                 <MudItem xs="12" md="9">
+                                      <MudTextField @bind-Value="notes" Label="Notes / Reference" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                 </MudItem>
+                             </MudGrid>
+                         </MudCardContent>
+                     </MudCard>
+                </MudItem>
+
+                <!-- Entry Row -->
+                <MudItem xs="12">
+                     <MudCard Elevation="2" Class="mb-3">
+                         <MudCardContent Class="py-2 px-4">
+                             <MudGrid Spacing="2" Class="align-center">
+                                 <MudItem xs="12" md="3">
+                                     <MudTextField Value="@tempItemName" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                   Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" OnAdornmentClick="OpenItemSearch" />
+                                 </MudItem>
+                                 <MudItem xs="6" md="2">
+                                     <MudSelect T="int?" Label="Unit" Value="@selectedUnitValue" ValueChanged="@OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                         @foreach(var u in tempUnits)
+                                         {
+                                             <MudSelectItem Value="@((int?)u.Value)">@u.DisplayName</MudSelectItem>
+                                         }
+                                     </MudSelect>
+                                 </MudItem>
+                                 <MudItem xs="6" md="2">
+                                     <MudNumericField @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense" 
+                                                   HideSpinButtons="true" Min="0" TextChanged="CalculateAmount" OnKeyDown="OnQtyKeyDown" />
+                                 </MudItem>
+                                  <MudItem xs="6" md="2">
+                                     <MudNumericField @ref="_rateField" @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense" 
+                                                   HideSpinButtons="true" Min="0" Format="N2" TextChanged="CalculateAmount" OnKeyDown="OnRateKeyDown" />
+                                 </MudItem>
+                                 <MudItem xs="6" md="2">
+                                     <MudTextField Value="@tempAmount" Label="Amount" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Format="N2" />
+                                 </MudItem>
+                                 <MudItem xs="6" md="1">
+                                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddLine" FullWidth="true" Disabled="@(tempItem == null || tempQty <= 0)">Add</MudButton>
+                                 </MudItem>
+                             </MudGrid>
+                         </MudCardContent>
+                     </MudCard>
+                </MudItem>
+
+                <!-- Grid -->
+                <MudItem xs="12">
+                    <MudTable Items="@stockEntries" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2">
+                        <HeaderContent>
+                            <MudTh>Item</MudTh>
+                            <MudTh>Unit</MudTh>
+                            <MudTh>Qty</MudTh>
+                            <MudTh>Rate</MudTh>
+                            <MudTh>Amount</MudTh>
+                            <MudTh>Action</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.ItemName</MudTd>
+                            <MudTd>@context.UnitName</MudTd>
+                            <MudTd>@context.UserQty.ToString("N3")</MudTd>
+                            <MudTd>@context.Rate.ToString("N2")</MudTd>
+                            <MudTd>@context.Amount.ToString("N2")</MudTd>
+                            <MudTd>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveLine(context))" />
+                            </MudTd>
+                        </RowTemplate>
+                         <FooterContent>
+                            <MudTfootRow Class="total-row">
+                                <MudTd colspan="2" Style="text-align:right; font-weight:bold;">Total:</MudTd>
+                                <MudTd Style="font-weight:bold;">@stockEntries.Sum(x => x.UserQty).ToString("N3")</MudTd>
+                                <MudTd></MudTd>
+                                <MudTd Style="font-weight:bold;">@stockEntries.Sum(x => x.Amount).ToString("N2")</MudTd>
+                                <MudTd></MudTd>
+                            </MudTfootRow>
+                        </FooterContent>
+                    </MudTable>
+                </MudItem>
+
+                <!-- Footer / Save -->
+                 <MudItem xs="12" Class="d-flex justify-end mt-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" Class="mr-2" OnClick="Reset">Clear</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveStock" Disabled="@(!stockEntries.Any() || _isProcessing)">
+                        @if (_isProcessing)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                            <MudText Class="ms-2">Processing</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Save Stock</MudText>
+                        }
+                    </MudButton>
+                </MudItem>
+                
+                <MudItem xs="12">
+                     <MudDivider Class="my-6" />
+                     <MudText Typo="Typo.h6" Class="mb-2">Current Active Opening Stock @(!string.IsNullOrEmpty(tempItemName) ? $" - {tempItemName}" : "")</MudText>
+                     <MudTable Items="@_currentOpeningStocks" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2">
+                        <HeaderContent>
+                            <MudTh>Code</MudTh>
+                            <MudTh>Item</MudTh>
+                            <MudTh>Unit</MudTh>
+                            <MudTh>Qty (Base)</MudTh>
+                            <MudTh>Rate</MudTh>
+                            <MudTh>Total Value</MudTh>
+                            <MudTh>Date</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.Item?.ItemCode</MudTd>
+                            <MudTd>@context.Item?.Name</MudTd>
+                            <MudTd>@(context.ItemUnit?.Name ?? context.Item?.BaseUnit?.Name)</MudTd>
+                            <MudTd>@context.Qty</MudTd>
+                            <MudTd>@context.Rate.ToString("N2")</MudTd>
+                            <MudTd>@context.TotalValue.ToString("N2")</MudTd>
+                            <MudTd>@context.Date.ToShortDateString()</MudTd>
+                        </RowTemplate>
+                     </MudTable>
+                </MudItem>
+
+            </MudGrid>
+        </MudForm>
+    </MudTabPanel>
+    
+    <MudTabPanel Text="History Log">
+         <MudTable Items="@_openingStockHistory" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2">
+            <HeaderContent>
+                <MudTh>Date</MudTh>
+                <MudTh>Action</MudTh>
+                <MudTh>Item</MudTh>
+                <MudTh>Qty</MudTh>
+                <MudTh>Rate</MudTh>
+                <MudTh>Notes</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Date.ToString("g")</MudTd>
+                <MudTd>@context.Action</MudTd>
+                <MudTd>@(items.FirstOrDefault(i => i.Id == context.ItemId)?.Name)</MudTd>
+                <MudTd>@context.Qty</MudTd>
+                <MudTd>@context.Rate.ToString("N2")</MudTd>
+                <MudTd>@context.Notes</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="All History Logs">
+         <MudTable T="OpeningStockHistory" ServerData="ServerReload"
+                   Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2" @ref="_allHistoryTable">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">Full Audit Log</MudText>
+                <MudSpacer />
+                <MudTextField T="string" ValueChanged="@(s=>OnSearch(s))" Placeholder="Search by Item/Notes/Action" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true" DebounceInterval="300"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Date</MudTh>
+                <MudTh>Action</MudTh>
+                <MudTh>Item</MudTh>
+                <MudTh>Qty</MudTh>
+                <MudTh>Rate</MudTh>
+                <MudTh>Notes</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Date.ToString("g")</MudTd>
+                <MudTd>@context.Action</MudTd>
+               <MudTd>@context.Item?.Name</MudTd>
+                <MudTd>@context.Qty</MudTd>
+                <MudTd>@context.Rate.ToString("N2")</MudTd>
+                <MudTd>@context.Notes</MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private MudForm form;
+    private bool success;
+    private bool _isProcessing = false;
+    
+    private DateTime? entryDate = DateTime.Now;
+    private string notes = "Opening Stock";
+
+    // Entry Row Variables
+    private Item? tempItem;
+    private string tempItemName = "";
+    private int? selectedUnitValue; 
+    private List<UnitDisplay> tempUnits = new List<UnitDisplay>();
+    private decimal tempQty = 0;
+    private decimal tempRate = 0;
+    private decimal tempAmount = 0;
+    
+    // Grid Data
+    private List<StockEntryLine> stockEntries = new List<StockEntryLine>();
+    
+    // Read-only Data
+    private List<Item> items = new List<Item>(); // For cache if needed or just rely on API
+    private List<ItemOpeningStock> _currentOpeningStocks = new List<ItemOpeningStock>();
+    private List<OpeningStockHistory> _openingStockHistory = new List<OpeningStockHistory>(); 
+
+    private MudNumericField<decimal> _rateField;
+
+    // Helper class for Unit Dropdown
+    public class UnitDisplay
+    {
+        public int Value { get; set; } // Unique ID for Dropdown (Negative for Base, Positive for ItemUnit)
+        public int UnitId { get; set; }
+        public string DisplayName { get; set; }
+        public decimal Multiplier { get; set; }
+        public int? ItemUnitId { get; set; } // Null for Base Unit
+        public decimal? SpecificRate { get; set; }
+    }
+
+    public class StockEntryLine
+    {
+        public Item Item { get; set; }
+        public string ItemName { get; set; }
+        public int UnitId { get; set; }
+        public int? ItemUnitId { get; set; } 
+        public string UnitName { get; set; }
+        public decimal UserQty { get; set; }
+        public decimal QtyPerUnit { get; set; } = 1;
+        public decimal BaseQty => UserQty * QtyPerUnit;
+        public decimal Rate { get; set; }
+        public decimal Amount => UserQty * Rate;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+         // We might not need to load all items if using search dialog
+         // But maintaining 'items' list for history item name lookup if history returns IDs
+         items = await ItemService.GetAllItemsAsync(); 
+    }
+
+    private async Task OpenItemSearch()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = DialogService.Show<ItemSearchDialog>("Search Item", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is Item item)
+        {
+            await OnItemSelected(item);
+        }
+    }
+
+    private async Task OnItemSelected(Item item)
+    {
+        // Check Duplicate in Pending List
+        if (stockEntries.Any(x => x.Item.Id == item.Id))
+        {
+            Snackbar.Add("This item is already added to the pending list.", Severity.Warning);
+            return;
+        }
+
+        tempItem = item;
+        tempItemName = $"{item.ItemCode} - {item.Name}";
+        
+        // Defaults
+        tempQty = 1;
+        tempRate = item.Rate; // Default to Item Rate
+        
+        // Populate Units
+        tempUnits.Clear();
+        
+        // 1. Base Unit
+        if (item.BaseUnit != null)
+        {
+             tempUnits.Add(new UnitDisplay 
+             { 
+                 Value = -item.UnitId, 
+                 UnitId = item.UnitId, 
+                 DisplayName = item.BaseUnit.Name, 
+                 Multiplier = 1, 
+                 ItemUnitId = null,
+                 SpecificRate = item.Rate
+             });
+        }
+        
+        // 2. Packing Units
+        if (item.ItemUnits != null)
+        {
+            foreach (var iu in item.ItemUnits)
+            {
+                 var displayName = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                 tempUnits.Add(new UnitDisplay 
+                 { 
+                     Value = iu.Id, 
+                     UnitId = iu.UnitId, 
+                     DisplayName = displayName, 
+                     Multiplier = iu.QtyPerBaseUnit, 
+                     ItemUnitId = iu.Id,
+                     SpecificRate = iu.Rate > 0 ? iu.Rate : null
+                 });
+            }
+        }
+        
+        // Default Selection
+        if (tempUnits.Any())
+        {
+            var baseUnit = tempUnits.FirstOrDefault(u => u.Value < 0);
+            selectedUnitValue = baseUnit != null ? baseUnit.Value : tempUnits.First().Value;
+            
+            await OnUnitChanged(selectedUnitValue);
+            StateHasChanged(); // Force UI update for ID->Name
+        }
+
+        await LoadItemHistory(item.Id);
+    }
+
+    private async Task OnUnitChanged(int? value)
+    {
+        selectedUnitValue = value;
+        if (tempItem == null || value == null) return;
+
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == value);
+        if (selectedUnit != null)
+        {
+            // Update Rate logic
+            if (selectedUnit.SpecificRate.HasValue && selectedUnit.SpecificRate.Value > 0)
+            {
+                tempRate = selectedUnit.SpecificRate.Value;
+            }
+            else
+            {
+                // Fallback: Base Rate * Multiplier (if logic dictates) or just Base Rate
+                // Usually Packing Rate = Base Rate * Multiplier
+                tempRate = tempItem.Rate * selectedUnit.Multiplier;
+            }
+        }
+        CalculateAmount();
+    }
+    
+    private void CalculateAmount()
+    {
+        tempAmount = tempQty * tempRate;
+    }
+    
+    private void CalculateAmount(decimal value) // overload for EventCallback
+    {
+        CalculateAmount();
+    }
+    
+    // Key Handlers
+    private async Task OnQtyKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+        {
+            if (_rateField != null) await _rateField.FocusAsync();
+        }
+    }
+
+    private void OnRateKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+        {
+            AddLine();
+        }
+    }
+
+    private void AddLine()
+    {
+        if (tempItem == null || selectedUnitValue == null || tempQty <= 0) return;
+
+        var selectedUnit = tempUnits.First(u => u.Value == selectedUnitValue);
+        
+        // Determine Real Unit ID
+        int realUnitId = selectedUnit.UnitId; 
+        
+        stockEntries.Add(new StockEntryLine
+        {
+            Item = tempItem,
+            ItemName = tempItem.Name,
+            UnitId = realUnitId,
+            ItemUnitId = selectedUnit.ItemUnitId,
+            UnitName = selectedUnit.DisplayName,
+            UserQty = tempQty,
+            QtyPerUnit = selectedUnit.Multiplier,
+            Rate = tempRate // Rate is User Rate per Selected Unit
+        });
+
+        // Reset Entry
+        ResetEntryRow();
+    }
+
+    private void ResetEntryRow()
+    {
+        tempItem = null;
+        tempItemName = "";
+        selectedUnitValue = null;
+        tempUnits.Clear();
+        tempQty = 0;
+        tempRate = 0;
+        tempAmount = 0;
+        
+        _currentOpeningStocks.Clear();
+        _openingStockHistory.Clear();
+    }
+
+    private void RemoveLine(StockEntryLine line)
+    {
+        stockEntries.Remove(line);
+    }
+    
+    private void Reset()
+    {
+        stockEntries.Clear();
+        notes = "Opening Stock";
+        ResetEntryRow();
+    }
+
+    private async Task SaveStock()
+    {
+        if (!stockEntries.Any()) return;
+
+        _isProcessing = true;
+        try
+        {
+            foreach (var entry in stockEntries)
+            {
+                var openingStock = new ItemOpeningStock
+                {
+                     ItemId = entry.Item.Id,
+                     Qty = entry.BaseQty, // Logic expects Base Qty in DB? Yes, usually.
+                     Rate = entry.BaseQty > 0 ? (entry.Amount / entry.BaseQty) : 0, // Rate per Base Unit
+                     ItemUnitId = entry.ItemUnitId,
+                     Date = entryDate ?? DateTime.Now,
+                     TotalValue = entry.Amount, 
+                     Notes = $"{notes} | Input: {entry.UserQty} {entry.UnitName} @ {entry.Rate}"
+                };
+
+                await StockService.SaveOpeningStock(openingStock);
+            }
+
+            Snackbar.Add("Opening Stock updated successfully!", Severity.Success);
+            Reset();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving stock: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task LoadItemHistory(int itemId)
+    {
+        var current = await StockService.GetItemOpeningStock(itemId);
+        _currentOpeningStocks = current != null ? new List<ItemOpeningStock> { current } : new List<ItemOpeningStock>();
+        _openingStockHistory = await StockService.GetOpeningStockHistory(itemId);
+    }
+
+    // Server Side Pagination for All History
+    private MudTable<OpeningStockHistory> _allHistoryTable;
+    private string searchString = "";
+
+    private async Task<TableData<OpeningStockHistory>> ServerReload(TableState state, CancellationToken token)
+    {
+        var result = await StockService.GetPaginatedOpeningStockHistory(searchString, state.Page, state.PageSize);
+        return new TableData<OpeningStockHistory>() { TotalItems = result.TotalCount, Items = result.Items };
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        _allHistoryTable.ReloadServerData();
+    }
+}

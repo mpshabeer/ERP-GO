@@ -83,6 +83,7 @@
                 </CardHeaderContent>
                  <CardHeaderActions>
                     <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                    <MudSwitch @bind-Value="_showInactive" Label="Show Inactive" Color="Color.Error" Size="Size.Small" Class="ml-4" />
                  </CardHeaderActions>
             </MudCardHeader>
             <MudCardContent>
@@ -216,8 +217,11 @@
         form.ResetValidation();
     }
 
+    private bool _showInactive = false;
+
     private bool FilterFunc(Customer customer)
     {
+        if (!_showInactive && !customer.IsActive) return false;
         if (string.IsNullOrWhiteSpace(searchString)) return true;
         if (customer.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
         if (customer.Code?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;

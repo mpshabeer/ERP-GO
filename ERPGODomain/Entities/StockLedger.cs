@@ -15,9 +15,17 @@ public class StockLedger
     [ForeignKey(nameof(ItemId))]
     public Item? Item { get; set; }
 
+    public int? ItemUnitId { get; set; }
+    
+    [ForeignKey(nameof(ItemUnitId))]
+    public ItemUnit? ItemUnit { get; set; }
+
     [Column(TypeName = "decimal(18,3)")]
     public decimal Qty { get; set; } // Positive for In, Negative for Out
 
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal Rate { get; set; } // Unit Rate/Cost
+    
     public string TransactionType { get; set; } = string.Empty; // "SALES", "PURCHASE", "OPENING", "ADJUSTMENT"
 
     public string RefId { get; set; } = string.Empty; // Invoice No or Ref No

@@ -23,7 +23,37 @@ public static class DependencyInjection
         services.AddRefitClient<IItemApiClient>()
             .ConfigureHttpClient(c => c.BaseAddress = baseAddress);
         services.AddScoped<IItemService, ItemApiService>();
+
+        // Customer Services
+        services.AddRefitClient<ICustomerApiClient>()
+            .ConfigureHttpClient(c => c.BaseAddress = baseAddress);
+        services.AddScoped<ICustomerService, CustomerApiService>();
+
+        // Supplier Services
+        services.AddRefitClient<ISupplierApiClient>()
+            .ConfigureHttpClient(c => c.BaseAddress = baseAddress);
+        services.AddScoped<ISupplierService, SupplierApiService>();
+
+        // Stock Services
+        services.AddRefitClient<IStockApiClient>()
+            .ConfigureHttpClient(c => c.BaseAddress = baseAddress);
+        services.AddScoped<IStockService, StockApiService>();
+
+        // Sales Services
+        services.AddRefitClient<ISalesApiClient>()
+            .ConfigureHttpClient(c => c.BaseAddress = baseAddress);
+        services.AddScoped<ISalesService, SalesApiService>();
         
+        // Purchase Services
+        services.AddRefitClient<IPurchaseApiClient>()
+            .ConfigureHttpClient(c => c.BaseAddress = baseAddress);
+        services.AddScoped<IPurchaseService, PurchaseApiService>();
+
+        // Category Services
+        services.AddRefitClient<ICategoryApiClient>()
+            .ConfigureHttpClient(c => c.BaseAddress = baseAddress);
+        services.AddScoped<ICategoryService, CategoryApiService>();
+
         return services;
     }
 }

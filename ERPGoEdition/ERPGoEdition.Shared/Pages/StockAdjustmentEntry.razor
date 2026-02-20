@@ -1,0 +1,344 @@
+@page "/stock-adjustment-entry"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Dialogs
+@inject IStockAdjustmentService AdjustmentService
+@inject IStockService StockService
+@inject IItemService ItemService
+@inject IUnitService UnitService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudText Typo="Typo.h5" GutterBottom="true">Stock Adjustment Entry</MudText>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <MudTabPanel Text="New Adjustment">
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudGrid Spacing="2">
+                <!-- Header -->
+                <MudItem xs="12">
+                     <MudCard Elevation="2" Class="mb-3">
+                         <MudCardContent Class="py-3 px-4">
+                             <MudGrid Spacing="3">
+                                 <MudItem xs="6" md="3">
+                                      <MudDatePicker Label="Date" @bind-Date="entryDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                 </MudItem>
+                                 <MudItem xs="6" md="3">
+                                      <MudTextField @bind-Value="adjustedBy" Label="Adjusted By" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                 </MudItem>
+                                 <MudItem xs="12" md="6">
+                                      <MudTextField @bind-Value="notes" Label="Notes / Reference" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                 </MudItem>
+                             </MudGrid>
+                         </MudCardContent>
+                     </MudCard>
+                </MudItem>
+
+                <!-- Entry Row -->
+                <MudItem xs="12">
+                     <MudCard Elevation="2" Class="mb-3">
+                         <MudCardContent Class="py-2 px-4">
+                             <MudGrid Spacing="2" Class="align-center">
+                                 <MudItem xs="12" md="3">
+                                     <MudTextField Value="@tempItemName" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                   Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" OnAdornmentClick="OpenItemSearch" />
+                                 </MudItem>
+                                 <MudItem xs="6" md="2">
+                                     <MudSelect T="int?" Label="Unit" Value="@selectedUnitValue" ValueChanged="@OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                         @foreach(var u in tempUnits)
+                                         {
+                                             <MudSelectItem Value="@((int?)u.Value)">@u.DisplayName</MudSelectItem>
+                                         }
+                                     </MudSelect>
+                                 </MudItem>
+                                 <MudItem xs="6" md="2">
+                                     <MudTextField Value="@displayedSystemQty" Label="System Qty" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Format="N3" />
+                                 </MudItem>
+                                 <MudItem xs="6" md="2">
+                                     <MudTextField @bind-Value="newPhysicalQty" Label="New Qty" Variant="Variant.Outlined" Margin="Margin.Dense" 
+                                                   InputType="InputType.Number" T="decimal" Immediate="true" />
+                                 </MudItem>
+                                  <MudItem xs="6" md="2">
+                                     <MudTextField Value="@(newPhysicalQty - displayedSystemQty)" Label="Adj Qty" ReadOnly="true" 
+                                                   Variant="Variant.Filled" Margin="Margin.Dense" Format="N3" 
+                                                   Adornment="Adornment.Start" AdornmentIcon="@((newPhysicalQty - displayedSystemQty) >= 0 ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.ArrowDownward)" 
+                                                   AdornmentColor="@((newPhysicalQty - displayedSystemQty) >= 0 ? Color.Success : Color.Error)" />
+                                 </MudItem>
+                                 <MudItem xs="6" md="1">
+                                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddLine" FullWidth="true" Disabled="@(tempItem == null)">Add</MudButton>
+                                 </MudItem>
+                             </MudGrid>
+                         </MudCardContent>
+                     </MudCard>
+                </MudItem>
+
+                <!-- Grid -->
+                <MudItem xs="12">
+                    <MudTable Items="@adjustmentDetails" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2">
+                        <HeaderContent>
+                            <MudTh>Item</MudTh>
+                            <MudTh>Unit</MudTh>
+                            <MudTh>System Qty</MudTh>
+                            <MudTh>New Qty</MudTh>
+                            <MudTh>Adj Qty</MudTh>
+                            <MudTh>Notes</MudTh>
+                            <MudTh>Action</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.Item?.Name</MudTd>
+                            <MudTd>@(context.ItemUnit?.Name ?? context.Item?.BaseUnit?.Name)</MudTd>
+                            <MudTd>@context.SystemQty.ToString("N3")</MudTd>
+                            <MudTd>@context.NewQty.ToString("N3")</MudTd>
+                            <MudTd Style="@(context.AdjustedQty < 0 ? "color:red; font-weight:bold;" : "color:green; font-weight:bold;")">
+                                @(context.AdjustedQty > 0 ? "+" : "")@context.AdjustedQty.ToString("N3")
+                            </MudTd>
+                            <MudTd>@context.Notes</MudTd>
+                            <MudTd>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveLine(context))" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudItem>
+
+                <!-- Footer / Save -->
+                 <MudItem xs="12" Class="d-flex justify-end mt-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" Class="mr-2" OnClick="Reset">Clear</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAdjustment" Disabled="@(!adjustmentDetails.Any())">Save Adjustment</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </MudTabPanel>
+    
+    <MudTabPanel Text="Saved Adjustments">
+        <MudTable Items="@savedHeaders" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2">
+            <HeaderContent>
+                <MudTh>Adjustment No</MudTh>
+                <MudTh>Date</MudTh>
+                <MudTh>Adjusted By</MudTh>
+                <MudTh>Notes</MudTh>
+                <MudTh>Action</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.AdjustmentNo</MudTd>
+                <MudTd>@context.Date.ToString("g")</MudTd>
+                <MudTd>@context.AdjustedBy</MudTd>
+                <MudTd>@context.Notes</MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Info" OnClick="@(() => ShowDetails(context.Id))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private MudForm form;
+    private bool success;
+    private DateTime? entryDate = DateTime.Now;
+    private string adjustedBy = "";
+    private string notes = "";
+
+    // Entry Row
+    private Item? tempItem;
+    private string tempItemName = "";
+    private int? selectedUnitValue; // Changed from tempUnitId to allow negative generic IDs
+    private List<UnitDisplay> tempUnits = new List<UnitDisplay>();
+    private decimal displayedSystemQty = 0; // In Selected Unit
+    private decimal newPhysicalQty = 0; // In Selected Unit
+    
+    private List<StockAdjustmentDetail> adjustmentDetails = new List<StockAdjustmentDetail>();
+    private List<StockAdjustmentHeader> savedHeaders = new List<StockAdjustmentHeader>();
+
+    // ...
+
+    // Helper class for Unit Dropdown
+    public class UnitDisplay
+    {
+        public int Value { get; set; } // Unique ID for Dropdown
+        public int UnitId { get; set; }
+        public string DisplayName { get; set; }
+        public decimal Multiplier { get; set; }
+        public int? ItemUnitId { get; set; } // Null for Base Unit
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        savedHeaders = await AdjustmentService.GetAdjustments();
+    }
+
+    private async Task OpenItemSearch()
+    {
+        var dialog = DialogService.Show<ItemSearchDialog>("Search Item", new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is Item item)
+        {
+            await OnItemSelected(item);
+        }
+    }
+
+    private async Task OnItemSelected(Item item)
+    {
+        // Check Duplicate
+        if (adjustmentDetails.Any(x => x.ItemId == item.Id))
+        {
+            Snackbar.Add("This item is already added to the adjustment list.", Severity.Warning);
+            return;
+        }
+
+        tempItem = item;
+        tempItemName = $"{item.ItemCode} - {item.Name}";
+        
+        // Populate Units
+        tempUnits.Clear();
+        
+        // 1. Base Unit (Use negative UnitId to ensure uniqueness if ItemUnitId is used for others)
+        if (item.BaseUnit != null)
+        {
+            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null });
+        }
+        
+        // 2. Other Units
+        var fullItem = await ItemService.GetItemByIdAsync(item.Id);
+        if (fullItem != null)
+        {
+             tempItem = fullItem;
+             foreach (var iu in fullItem.ItemUnits)
+             {
+                 // Use specific Packing Name (ItemUnit.Name) if available, otherwise fallback to Unit.Name
+                 var displayName = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                 // Use ItemUnit.Id (Positive) as Value
+                 tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = displayName, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+             }
+        }
+        
+        // Default select Base Unit (Value < 0) or first
+        if (tempUnits.Any())
+        {
+            var baseUnit = tempUnits.FirstOrDefault(u => u.Value < 0);
+            if (baseUnit != null)
+            {
+                 selectedUnitValue = baseUnit.Value;
+            }
+            else
+            {
+                 selectedUnitValue = tempUnits.First().Value;
+            }
+            await OnUnitChanged(selectedUnitValue); 
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnUnitChanged(int? value)
+    {
+        // Value is either ItemUnitId (positive) or -BaseUnitId (negative)
+        selectedUnitValue = value;
+        if (tempItem == null || value == null) return;
+
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == value);
+        if (selectedUnit != null)
+        {
+            // We need to set tempUnitId for other logic if needed, but really we just need Multiplier
+            var baseStock = await StockService.GetStock(tempItem.Id);
+            displayedSystemQty = baseStock / selectedUnit.Multiplier;
+            newPhysicalQty = displayedSystemQty; // Default
+        }
+    }
+
+    private void AddLine()
+    {
+        if (tempItem == null || selectedUnitValue == null) return;
+
+        var selectedUnit = tempUnits.First(u => u.Value == selectedUnitValue);
+
+        var detail = new StockAdjustmentDetail
+        {
+            ItemId = tempItem.Id,
+            Item = tempItem, // For Display
+            ItemUnitId = selectedUnit.ItemUnitId,
+            ItemUnit = selectedUnit.ItemUnitId.HasValue ? tempItem.ItemUnits.FirstOrDefault(x => x.Id == selectedUnit.ItemUnitId) : null, // Display purpose only really
+            SystemQty = displayedSystemQty,
+            NewQty = newPhysicalQty,
+            AdjustedQty = newPhysicalQty - displayedSystemQty, // This is in Selected Unit
+            Notes = "" 
+        };
+
+        if (detail.AdjustedQty == 0)
+        {
+            Snackbar.Add("No adjustment made (Qty is same).", Severity.Info);
+            return;
+        }
+
+        adjustmentDetails.Add(detail);
+        
+        // Reset Entry Row
+        ResetEntry();
+    }
+
+    private void RemoveLine(StockAdjustmentDetail detail)
+    {
+        adjustmentDetails.Remove(detail);
+    }
+
+    private async Task SaveAdjustment()
+    {
+        if (!adjustmentDetails.Any()) return;
+
+        var header = new StockAdjustmentHeader
+        {
+            Date = entryDate ?? DateTime.Now,
+            AdjustedBy = adjustedBy,
+            Notes = notes,
+            Details = adjustmentDetails,
+            TotalQty = adjustmentDetails.Sum(x => x.AdjustedQty) // Logic valid only if all same unit? No, just sum.
+        };
+
+        try 
+        {
+            var adjNo = await AdjustmentService.CreateAdjustment(header);
+            Snackbar.Add($"Stock Adjustment {adjNo} Saved Successfully!", Severity.Success);
+            Reset();
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving adjustment: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Reset()
+    {
+        adjustmentDetails.Clear();
+        notes = "";
+        adjustedBy = "";
+        entryDate = DateTime.Now;
+        ResetEntry();
+    }
+
+    private void ResetEntry()
+    {
+        tempItem = null;
+        tempItemName = "";
+        tempUnits.Clear();
+        selectedUnitValue = null;
+        displayedSystemQty = 0;
+        newPhysicalQty = 0;
+    }
+
+    private async Task ShowDetails(int id)
+    {
+        var header = await AdjustmentService.GetAdjustment(id);
+        if (header != null)
+        {
+             var parameters = new DialogParameters();
+            parameters.Add("Header", header);
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+             await DialogService.ShowAsync<StockAdjustmentDetailsDialog>("Adjustment Details", parameters, options);
+        }
+    }
+}

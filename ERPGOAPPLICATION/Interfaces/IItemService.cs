@@ -10,4 +10,5 @@ public interface IItemService
     Task<Item> AddItemAsync(Item item);
     Task<Item> UpdateItemAsync(Item item);
     Task DeleteItemAsync(int id);
+    Task<string> GetNextItemCodeAsync(string prefix, int startNumber);
 }

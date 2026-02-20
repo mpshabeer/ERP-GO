@@ -37,5 +37,11 @@ public class Item
 
     public bool IsActive { get; set; } = true;
 
+    public int? CategoryId { get; set; }
+    [ForeignKey(nameof(CategoryId))]
+    public Category? Category { get; set; }
+
+
+
     public virtual ICollection<ItemUnit> ItemUnits { get; set; } = new List<ItemUnit>();
 }

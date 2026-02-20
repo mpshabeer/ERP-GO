@@ -1,0 +1,908 @@
+@page "/purchase-entry"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.DTOs
+@using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Dialogs
+@inject IPurchaseService PurchaseService
+@inject ISupplierService SupplierService
+@inject IItemService ItemService
+@inject IUnitService UnitService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;">
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="px-4 py-4" 
+             ActivePanelIndex="@_activeTabIndex" ActivePanelIndexChanged="OnTabChanged" KeepPanelsAlive="true">
+        
+        <!-- TAB 1: NEW / EDIT PURCHASE -->
+        <MudTabPanel Text="@(purchase.Id == 0 ? "New Purchase" : $"Edit Purchase #{purchase.PurchaseNo}")" Icon="@Icons.Material.Filled.ShoppingCart">
+            <div style="height: calc(100vh - 140px); display: flex; flex-direction: column; overflow: hidden;">
+                <!-- Scrollable Form Area -->
+                <div style="flex: 1; overflow-y: auto; min-height: 0;" class="px-1 py-1">
+                    <MudForm @ref="form" @bind-IsValid="@success">
+
+                        <!-- HEADER CARD -->
+                        <MudCard Elevation="2" Class="mb-3">
+                            <MudCardHeader Class="py-2 px-4" Style="border-bottom: 1px solid #e0e0e0;">
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.subtitle1">
+                                        <b>@(purchase.Id == 0 ? "New Purchase Details" : $"Editing Purchase: {purchase.PurchaseNo}")</b>
+                                    </MudText>
+                                </CardHeaderContent>
+                                <CardHeaderActions>
+                                    <MudButton Variant="Variant.Text" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearPurchase" Size="Size.Small">Clear / New</MudButton>
+                                </CardHeaderActions>
+                            </MudCardHeader>
+                            <MudCardContent Class="py-3 px-4">
+                                <MudGrid Spacing="3">
+                                    <MudItem xs="6" md="2">
+                                        <MudTextField @bind-Value="purchase.PurchaseNo" Label="Purchase No." Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="true" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudTextField @bind-Value="purchase.InvoiceNo" Label="Supplier Inv No" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" RequiredError="Supplier Invoice No is required" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudDatePicker Label="Date" @bind-Date="purchaseDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                     @if (purchase.PaymentTerms != "Cash")
+                                    {
+                                        <MudItem xs="6" md="2">
+                                            <MudDatePicker Label="Due Date" @bind-Date="purchase.DueDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                        </MudItem>
+                                    }
+                                    <MudItem xs="6" md="2">
+                                        <MudSelect T="string" Label="Payment Terms" @bind-Value="purchase.PaymentTerms" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            <MudSelectItem Value="@("Cash")">Cash</MudSelectItem>
+                                            <MudSelectItem Value="@("Credit")">Credit</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="2">
+                                        <MudAutocomplete T="Supplier" Label="Supplier *" @bind-Value="purchase.Supplier" SearchFunc="@SearchSuppliers"
+                                                         ToStringFunc="@(s => s == null ? null : s.Name)"
+                                                         Required="true" RequiredError="Supplier is required."
+                                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         AdornmentIcon="@Icons.Material.Filled.Search"
+                                                         AnchorOrigin="Origin.BottomCenter" Dense="true"
+                                                         Clearable="true" ResetValueOnEmptyText="true">
+                                            <ItemTemplate Context="e">
+                                                <div class="d-flex flex-column pa-1">
+                                                    <MudText Typo="Typo.body2"><b>@e.Name</b></MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@e.Code &bull; @e.Mobile</MudText>
+                                                </div>
+                                            </ItemTemplate>
+                                        </MudAutocomplete>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+
+                        <!-- ENTRY ROW -->
+                        <MudCard Elevation="2" Class="mb-3">
+                            <MudCardContent Class="py-2 px-4">
+                                <MudGrid Spacing="2" Class="align-center">
+                                    <MudItem xs="12" md="3">
+                                        <MudTextField Value="@tempItemName" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                                                      OnAdornmentClick="OpenItemSearch" Placeholder="Click 🔍 to search..." />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudSelect T="int?" Label="Unit" Value="@selectedUnitValue" ValueChanged="@OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            @foreach(var u in tempUnits)
+                                            {
+                                                <MudSelectItem Value="@((int?)u.Value)">@u.DisplayName</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" TextChanged="CalculateAmount" OnKeyDown="OnQtyKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudNumericField @ref="_rateField" @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Format="N2" TextChanged="CalculateAmount" OnKeyDown="OnRateKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @bind-Value="tempDiscPercent" Label="Disc %" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Max="100" TextChanged="@(() => OnDiscPercentChanged(tempDiscPercent))" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudTextField Value="@tempAmount" Label="Net Amount" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Format="N2" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        @if (_editingItem == null)
+                                        {
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddLine" FullWidth="true"
+                                                       Disabled="@(tempItem == null || tempQty <= 0)"
+                                                       StartIcon="@Icons.Material.Filled.Add">Add</MudButton>
+                                        }
+                                        else
+                                        {
+                                            <div class="d-flex flex-column gap-1">
+                                                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="UpdateLine" FullWidth="true"
+                                                           Disabled="@(tempItem == null || tempQty <= 0)"
+                                                           StartIcon="@Icons.Material.Filled.Save"
+                                                           Style="font-weight:bold;">Update</MudButton>
+                                                <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="CancelEdit" FullWidth="true"
+                                                           Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.Cancel">Cancel</MudButton>
+                                            </div>
+                                        }
+                                    </MudItem>
+                                </MudGrid>
+                                @if (tempItem != null)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mt-1" Color="Color.Info">
+                                        <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" Class="mr-1" />
+                                        Current Stock: <b>@tempItem.CurrentStock</b> (base units)
+                                    </MudText>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+
+                        <!-- ITEM GRID -->
+                        @if (_editingItem != null)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2" Icon="@Icons.Material.Filled.Edit">
+                                Editing row: <b>@_editingItem.Item?.Name</b> — Modify fields above and click <b>Update</b>, or click <b>Cancel</b> to discard.
+                            </MudAlert>
+                        }
+                        <MudTable Items="@purchase.PurchaseItems" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2" Class="mb-3">
+                            <HeaderContent>
+                                <MudTh Style="width: 50px;">#</MudTh>
+                                <MudTh Style="width: 40%;">Item</MudTh>
+                                <MudTh>Unit</MudTh>
+                                <MudTh Style="text-align:right;">Qty</MudTh>
+                                <MudTh Style="text-align:right;">Rate</MudTh>
+                                <MudTh Style="text-align:right;">Disc %</MudTh>
+                                <MudTh Style="text-align:right;">Amount</MudTh>
+                                <MudTh Style="width:80px; text-align:center;">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                @{
+                                    bool isEditing = _editingItem == context;
+                                    string rowBg = isEditing ? "background-color: #fff9e6; font-weight: bold;" : "";
+                                    var itemsList = purchase.PurchaseItems.ToList();
+                                    int rowIndex = itemsList.IndexOf(context) + 1;
+                                }
+                                <MudTd Style="@rowBg">@rowIndex</MudTd>
+                                <MudTd DataLabel="Item" Style="@rowBg">
+                                    <div class="d-flex align-center gap-1">
+                                        @if (isEditing)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                                        }
+                                        <div>
+                                            <MudText Typo="Typo.body2"><b>@context.Item?.Name</b></MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Item?.ItemCode</MudText>
+                                        </div>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Unit" Style="@rowBg">@((context.ItemUnit != null && !string.IsNullOrWhiteSpace(context.ItemUnit.Name)) ? context.ItemUnit.Name : context.Unit?.Name)</MudTd>
+                                <MudTd DataLabel="Qty" Style="@($"text-align:right; {rowBg}")">@context.Qty.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Rate" Style="@($"text-align:right; {rowBg}")">@context.Rate.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Disc %" Style="@($"text-align:right; {rowBg}")">@context.DiscountPercent.ToString("0.##")%</MudTd>
+                                <MudTd DataLabel="Amount" Style="@($"text-align:right; {rowBg}")"><b>@context.Amount.ToString("N2")</b></MudTd>
+                                <MudTd Style="@($"text-align:center; {rowBg}")">
+                                    <MudTooltip Text="Edit this row">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                                       OnClick="@(() => EditLine(context))"
+                                                       Disabled="@(_editingItem != null && _editingItem != context)" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Delete this row">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                       OnClick="@(() => RemoveLine(context))"
+                                                       Disabled="@(_editingItem == context)" />
+                                    </MudTooltip>
+                                </MudTd>
+                            </RowTemplate>
+                            <FooterContent>
+                                <MudTfootRow Class="total-row">
+                                    <MudTd colspan="6" Style="text-align:right; font-weight:bold;">Subtotal:</MudTd>
+                                    <MudTd Style="text-align:right; font-weight:bold;">@purchase.PurchaseItems.Sum(x => x.Amount).ToString("N2")</MudTd>
+                                    <MudTd></MudTd>
+                                </MudTfootRow>
+                            </FooterContent>
+                        </MudTable>
+
+                        <!-- TOTALS + NOTES -->
+                        <MudCard Elevation="2" Class="mb-3">
+                            <MudCardContent Class="py-3 px-4">
+                                <MudGrid Spacing="3">
+                                    <!-- Left: Notes -->
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField @bind-Value="purchase.Notes" Label="Notes / Remarks" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" />
+                                    </MudItem>
+
+                                    <!-- Right: Totals Summary -->
+                                    <MudItem xs="12" md="6">
+                                        <MudPaper Outlined="true" Class="pa-0" Style="border-radius: 8px; overflow: hidden;">
+                                            <div class="d-flex justify-space-between align-center px-4 py-2" style="background: #fafafa; border-bottom: 1px solid #e0e0e0;">
+                                                <MudText Typo="Typo.body2" Style="color: #555;">Subtotal</MudText>
+                                                <MudText Typo="Typo.body1"><b>@purchase.SubTotal.ToString("N2")</b></MudText>
+                                            </div>
+                                            <div class="d-flex justify-space-between align-center px-4 py-2" style="background: #fff8f8; border-bottom: 1px solid #e0e0e0;">
+                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                    <MudText Typo="Typo.body2" Style="color: #555; min-width: 60px;">Discount</MudText>
+                                                    <MudNumericField @bind-Value="purchase.DiscountPercent"
+                                                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                     HideSpinButtons="true" Min="0" Max="100"
+                                                                     Adornment="Adornment.End" AdornmentText="%"
+                                                                     Style="width: 100px;"
+                                                                     TextChanged="RecalculateTotals" />
+                                                </div>
+                                                <MudText Typo="Typo.body1" Color="Color.Error"><b>- @purchase.DiscountAmount.ToString("N2")</b></MudText>
+                                            </div>
+                                            <div class="d-flex justify-space-between align-center px-4 py-2" style="background: #f6fff6; border-bottom: 1px solid #e0e0e0;">
+                                                <div class="d-flex align-center" style="gap: 8px;">
+                                                    <MudText Typo="Typo.body2" Style="color: #555; min-width: 60px;">Tax / GST</MudText>
+                                                    <MudNumericField @bind-Value="purchase.TaxPercent"
+                                                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                     HideSpinButtons="true" Min="0" Max="100"
+                                                                     Adornment="Adornment.End" AdornmentText="%"
+                                                                     Style="width: 100px;"
+                                                                     TextChanged="RecalculateTotals" />
+                                                </div>
+                                                <MudText Typo="Typo.body1" Color="Color.Success"><b>+ @purchase.TaxAmount.ToString("N2")</b></MudText>
+                                            </div>
+                                            <div class="d-flex justify-space-between align-center px-4 py-3" style="background: #1565C0;">
+                                                <MudText Typo="Typo.subtitle1" Style="color: white; font-weight: 700; letter-spacing: 0.04em;">GRAND TOTAL</MudText>
+                                                <MudText Typo="Typo.h6" Style="color: white; font-weight: 700;">@purchase.TotalAmount.ToString("N2")</MudText>
+                                            </div>
+                                        </MudPaper>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudCardContent>
+                        </MudCard>
+
+                    </MudForm>
+                </div>
+
+                <!-- FIXED FOOTER -->
+                <div style="flex: 0 0 auto; border-top: 2px solid #1976d2;" class="px-4 py-2">
+                    <div class="d-flex justify-space-between align-center">
+                        <div class="d-flex align-center gap-3">
+                            <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Color="Color.Primary" />
+                            <div>
+                                <MudText Typo="Typo.caption">Total Amount</MudText>
+                                <MudText Typo="Typo.h6" Color="Color.Primary"><b>@purchase.TotalAmount.ToString("N2")</b></MudText>
+                            </div>
+                            @if (purchase.PurchaseItems.Count > 0)
+                            {
+                                <MudChip T="string" Color="Color.Default" Size="Size.Small">@purchase.PurchaseItems.Count item(s)</MudChip>
+                            }
+                        </div>
+                        <div class="d-flex gap-2">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearPurchase"
+                                       StartIcon="@Icons.Material.Filled.ClearAll" Size="Size.Large">
+                                Clear / New
+                            </MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePurchase"
+                                       Disabled="_isProcessing" StartIcon="@Icons.Material.Filled.Save" Size="Size.Large"
+                                       Style="min-width: 160px; font-weight: bold;">
+                                @if (_isProcessing)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Saving...</span>
+                                }
+                                else
+                                {
+                                    <span>@(purchase.Id == 0 ? "SAVE PURCHASE" : "UPDATE PURCHASE")</span>
+                                }
+                            </MudButton>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </MudTabPanel>
+        
+        <!-- TAB 2: PURCHASE HISTORY -->
+        <MudTabPanel Text="Purchase History" Icon="@Icons.Material.Filled.History">
+            <div style="height: calc(100vh - 140px); display: flex; flex-direction: column; overflow: hidden;">
+                <!-- Search / Filter Card -->
+                <div style="flex: 0 0 auto;" class="px-1 py-1">
+                    <MudCard Elevation="2">
+                        <MudCardContent Class="py-2 px-4">
+                            <MudGrid Spacing="2" Class="align-center">
+                                <MudItem xs="12" sm="3">
+                                    <MudTextField @bind-Value="listFilter.PurchaseNo" Label="Purchase No." Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Tag" Placeholder="e.g. PUR001"
+                                                  @onkeydown="OnSearchKeyDown" />
+                                </MudItem>
+                                 <MudItem xs="12" sm="3">
+                                    <MudTextField @bind-Value="listFilter.InvoiceNo" Label="Supplier Inv." Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Receipt" Placeholder="e.g. SUP-INV-99"
+                                                  @onkeydown="OnSearchKeyDown" />
+                                </MudItem>
+                                <MudItem xs="12" sm="3">
+                                    <MudTextField @bind-Value="listFilter.SupplierName" Label="Supplier" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" Placeholder="Search supplier..."
+                                                  @onkeydown="OnSearchKeyDown" />
+                                </MudItem>
+                                <MudItem xs="12" sm="3" Class="d-flex gap-2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search"
+                                               OnClick="LoadList" FullWidth="true" Size="Size.Small">Search</MudButton>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ClearAll"
+                                               OnClick="ClearListFilter" Size="Size.Small">Clear</MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        </MudCardContent>
+                    </MudCard>
+                </div>
+
+                <!-- Results Summary -->
+                <div style="flex: 0 0 auto;" class="px-4 pb-1 d-flex justify-space-between align-center">
+                    @if (!_listLoading && _listResult != null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Showing <b>@(_listResult.Items.Count)</b> of <b>@_listResult.TotalCount</b> purchases
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Page <b>@_listResult.Page</b> of <b>@_listResult.TotalPages</b>
+                        </MudText>
+                    }
+                </div>
+
+                <!-- List Table -->
+                <div style="flex: 1; overflow-y: auto; min-height: 0;" class="px-1">
+                    @if (_listLoading)
+                    {
+                        <div class="d-flex justify-center align-center" style="height: 200px;">
+                            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                        </div>
+                    }
+                    else if (_listResult?.Items.Count == 0)
+                    {
+                        <MudPaper Elevation="0" Class="d-flex flex-column align-center justify-center pa-8" Style="min-height: 200px; border: 2px dashed #e0e0e0;">
+                            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Tertiary" />
+                            <MudText Typo="Typo.body1" Class="mt-2" Color="Color.Tertiary">No purchases found</MudText>
+                        </MudPaper>
+                    }
+                    else if (_listResult != null)
+                    {
+                        <MudTable Items="@_listResult.Items" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2" FixedHeader="true" Height="100%">
+                            <HeaderContent>
+                                <MudTh>#</MudTh>
+                                <MudTh>Purchase No.</MudTh>
+                                <MudTh>Date</MudTh>
+                                <MudTh>Supplier</MudTh>
+                                <MudTh>Supplier Ref</MudTh>
+                                <MudTh Style="text-align:right;">Total</MudTh>
+                                <MudTh Style="width: 100px; text-align:center;">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                @{
+                                    int rowNum = _listResult.Items.IndexOf(context) + 1 + ((_listResult.Page - 1) * _listResult.PageSize);
+                                }
+                                <MudTd>@rowNum</MudTd>
+                                <MudTd>
+                                    <MudLink Color="Color.Primary" Style="font-weight: bold; cursor: pointer;" OnClick="@(() => LoadPurchaseForEdit(context))">
+                                        @context.PurchaseNo
+                                    </MudLink>
+                                </MudTd>
+                                <MudTd>@context.Date.ToString("dd-MMM-yyyy")</MudTd>
+                                <MudTd>@context.Supplier?.Name</MudTd>
+                                <MudTd>@context.InvoiceNo</MudTd>
+                                <MudTd Style="text-align:right; font-weight: bold; color: #1976d2;">@context.TotalAmount.ToString("N2")</MudTd>
+                                <MudTd Style="text-align:center;">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit"
+                                               OnClick="@(() => LoadPurchaseForEdit(context))">Edit</MudButton>
+                                </MudTd>
+                            </RowTemplate>
+                            <PagerContent>
+                                <MudTablePager />
+                            </PagerContent>
+                        </MudTable>
+                        
+                         <!-- Pagination Footer Custom -->
+                        @if (_listResult.TotalPages > 0)
+                        {
+                            <div style="flex: 0 0 auto; border-top: 1px solid #e0e0e0;" class="px-4 py-2 d-flex justify-center align-center gap-2">
+                                <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Disabled="@(_listResult.Page == 1)" OnClick="@(() => GoToPage(1))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="@(_listResult.Page == 1)" OnClick="@(() => GoToPage(_listResult.Page - 1))" />
+                                <MudText Typo="Typo.caption">Page @_listResult.Page of @_listResult.TotalPages</MudText>
+                                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="@(_listResult.Page >= _listResult.TotalPages)" OnClick="@(() => GoToPage(_listResult.Page + 1))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.LastPage" Disabled="@(_listResult.Page >= _listResult.TotalPages)" OnClick="@(() => GoToPage(_listResult.TotalPages))" />
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </MudTabPanel>
+
+    </MudTabs>
+
+</div>
+
+@code {
+    private int _activeTabIndex = 0;
+
+    // ────────── NEW / EDIT PURCHASE STATE ──────────
+    private Purchase purchase = new Purchase();
+    private DateTime? purchaseDate = DateTime.Now;
+    private bool success;
+    private MudForm form;
+    private bool _isProcessing = false;
+    private PurchaseItem? _editingItem = null; 
+
+    // Cache
+    private List<Supplier> suppliers = new List<Supplier>();
+    private List<Unit> allUnits = new List<Unit>();
+
+    // Entry Row Variables
+    private Item? tempItem;
+    private string tempItemName = "";
+    private int? selectedUnitValue;
+    private List<UnitDisplay> tempUnits = new List<UnitDisplay>();
+    private decimal tempQty = 0;
+    private decimal tempRate = 0;
+    private decimal tempDiscPercent = 0;
+    private decimal tempDiscAmount = 0;
+    private decimal tempAmount = 0;
+
+    private MudNumericField<decimal> _rateField;
+
+    public class UnitDisplay
+    {
+        public int Value { get; set; }
+        public int UnitId { get; set; }
+        public string DisplayName { get; set; }
+        public decimal Multiplier { get; set; }
+        public int? ItemUnitId { get; set; }
+    }
+
+    // ────────── LIST STATE ──────────
+    private PurchaseSearchRequest listFilter = new() { PageSize = 15 };
+    private PagedResult<Purchase>? _listResult;
+    private bool _listLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCacheData();
+        await InitializeNewPurchaseAsync();
+        await LoadList(); 
+    }
+
+    private void OnTabChanged(int index)
+    {
+        _activeTabIndex = index;
+    }
+
+    private async Task InitializeNewPurchaseAsync()
+    {
+        try
+        {
+            purchase = new Purchase(); // Reset ID to 0
+            purchase.PurchaseNo = await PurchaseService.GetNextPurchaseNumber();
+        }
+        catch
+        {
+            purchase.PurchaseNo = $"PUR-ERR";
+        }
+
+        purchase.PaymentTerms = "Cash";
+        purchaseDate = DateTime.Now;
+        purchase.DueDate = DateTime.Now;
+        purchase.Date = DateTime.Now;
+        
+        purchase.PurchaseItems = new List<PurchaseItem>();
+        
+        // Reset Entry
+        CancelEdit();
+    }
+
+    private async Task LoadCacheData()
+    {
+        try
+        {
+            var t1 = SupplierService.GetAllSuppliersAsync();
+            var t2 = UnitService.GetAllUnitsAsync();
+            await Task.WhenAll(t1, t2);
+            suppliers = t1.Result.ToList();
+            allUnits = t2.Result.ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ────────── LIST METHODS ──────────
+
+    private async Task LoadList()
+    {
+        _listLoading = true;
+        try
+        {
+            _listResult = await PurchaseService.GetPurchasesAsync(listFilter);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading list: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _listLoading = false;
+        }
+    }
+
+    private async Task ClearListFilter()
+    {
+        listFilter = new PurchaseSearchRequest { PageSize = listFilter.PageSize };
+        await LoadList();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        listFilter.Page = page;
+        await LoadList();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            listFilter.Page = 1;
+            await LoadList();
+        }
+    }
+
+    // ────────── LOAD FOR EDIT LOGIC ──────────
+
+    private async Task LoadPurchaseForEdit(Purchase selectedPurchase)
+    {
+        if (purchase.PurchaseItems.Any() && purchase.Id == 0)
+        {
+            bool? result = await DialogService.ShowMessageBox(
+                "Unsaved Changes",
+                "You have unsaved changes in the current purchase. Loading another will discard these changes. Continue?",
+                yesText: "Discard & Load", cancelText: "Cancel");
+
+            if (result != true) return;
+        }
+
+        try
+        {
+            // Manual Deep Copy / Mapping
+             var newPur = new Purchase 
+            {
+                Id = selectedPurchase.Id,
+                PurchaseNo = selectedPurchase.PurchaseNo,
+                InvoiceNo = selectedPurchase.InvoiceNo,
+                Date = selectedPurchase.Date,
+                DueDate = selectedPurchase.DueDate,
+                PaymentTerms = selectedPurchase.PaymentTerms,
+                SupplierId = selectedPurchase.SupplierId,
+                Supplier = suppliers.FirstOrDefault(s => s.Id == selectedPurchase.SupplierId),
+                Notes = selectedPurchase.Notes,
+                SubTotal = selectedPurchase.SubTotal,
+                DiscountPercent = selectedPurchase.DiscountPercent,
+                DiscountAmount = selectedPurchase.DiscountAmount,
+                TaxPercent = selectedPurchase.TaxPercent,
+                TaxAmount = selectedPurchase.TaxAmount,
+                TotalAmount = selectedPurchase.TotalAmount,
+                PurchaseItems = new List<PurchaseItem>()
+            };
+
+            if (selectedPurchase.PurchaseItems != null)
+            {
+                foreach (var item in selectedPurchase.PurchaseItems)
+                {
+                    newPur.PurchaseItems.Add(new PurchaseItem
+                    {
+                        Id = item.Id,
+                        PurchaseId = item.PurchaseId,
+                        ItemId = item.ItemId,
+                        Item = item.Item,
+                        UnitId = item.UnitId,
+                        Unit = item.Unit,
+                        ItemUnitId = item.ItemUnitId,
+                        ItemUnit = item.ItemUnit, // Critical for display
+                        Qty = item.Qty,
+                        Rate = item.Rate,
+                        DiscountPercent = item.DiscountPercent,
+                        DiscountAmount = item.DiscountAmount,
+                        Amount = item.Amount,
+                        QtyInBaseUnit = item.QtyInBaseUnit
+                    });
+                }
+            }
+
+            purchase = newPur;
+            purchaseDate = purchase.Date; 
+            
+            _activeTabIndex = 0;
+            CancelEdit(); 
+            StateHasChanged();
+
+            Snackbar.Add($"Purchase {purchase.PurchaseNo} loaded for editing.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading purchase: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ────────── ENTRY METHODS ──────────
+
+    private async Task<IEnumerable<Supplier>> SearchSuppliers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value)) return suppliers;
+        return suppliers.Where(x =>
+            x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase) ||
+            x.Code.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    private async Task OpenItemSearch()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = DialogService.Show<ItemSearchDialog>("Search Item", options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Item item)
+            await OnItemSelected(item);
+    }
+
+    private async Task OnItemSelected(Item item)
+    {
+        tempItem = item;
+        tempItemName = $"{item.ItemCode} - {item.Name}";
+        tempQty = 1;
+        tempRate = item.PurchaseRate;
+        tempDiscPercent = 0;
+        tempDiscAmount = 0;
+
+        tempUnits.Clear();
+        if (item.BaseUnit != null)
+            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null });
+
+        if (item.ItemUnits != null)
+        {
+            foreach (var iu in item.ItemUnits)
+            {
+                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+            }
+        }
+
+        if (tempUnits.Any())
+        {
+            var baseUnit = tempUnits.FirstOrDefault(u => u.Value < 0);
+            selectedUnitValue = baseUnit?.Value ?? tempUnits.First().Value;
+            await OnUnitChanged(selectedUnitValue);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnUnitChanged(int? value)
+    {
+        selectedUnitValue = value;
+        if (tempItem == null || value == null) return;
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == value);
+        if (selectedUnit != null)
+        {
+            // Optional: If we had different rates per unit, we'd pick them here.
+            // For now, assume Base Purchase Rate is scaled by multiplier? 
+            // Usually Purchase Rate is per Base Unit or per Purchase Unit. 
+            // If Item.PurchaseRate is per Base Unit, then we multiply.
+            // tempRate = tempItem.PurchaseRate * selectedUnit.Multiplier; 
+            // Existing logic didn't scale rate, but for Sales we did. 
+            // Let's assume PurchaseRate in Item Master is for Base Unit? 
+            // Usually yes.
+             tempRate = tempItem.PurchaseRate * selectedUnit.Multiplier;
+        }
+        CalculateAmount();
+    }
+
+    private void OnDiscPercentChanged(decimal percent)
+    {
+        var gross = tempQty * tempRate;
+        tempDiscAmount = gross * (percent / 100);
+        CalculateAmount();
+    }
+
+    private void CalculateAmount()
+    {
+        var gross = tempQty * tempRate;
+        tempDiscAmount = gross * (tempDiscPercent / 100);
+        tempAmount = gross - tempDiscAmount;
+    }
+
+    private void RecalculateTotals()
+    {
+        purchase.SubTotal = purchase.PurchaseItems.Sum(x => x.Amount);
+        purchase.DiscountAmount = purchase.SubTotal * (purchase.DiscountPercent / 100);
+        purchase.TaxAmount = (purchase.SubTotal - purchase.DiscountAmount) * (purchase.TaxPercent / 100);
+        purchase.TotalAmount = purchase.SubTotal - purchase.DiscountAmount + purchase.TaxAmount;
+    }
+
+    private void RecalculateTotals(decimal value) => RecalculateTotals();
+
+    private async Task OnQtyKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            if (_rateField != null) await _rateField.FocusAsync();
+    }
+
+    private void OnRateKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            AddLine();
+    }
+
+    private void AddLine()
+    {
+        if (tempItem == null || selectedUnitValue == null || tempQty <= 0) return;
+
+        var selectedUnit = tempUnits.First(u => u.Value == selectedUnitValue);
+        decimal qtyInBase = tempQty * selectedUnit.Multiplier;
+
+        purchase.PurchaseItems.Add(new PurchaseItem
+        {
+            ItemId = tempItem.Id,
+            Item = tempItem,
+            UnitId = selectedUnit.UnitId,
+            Unit = allUnits.FirstOrDefault(u => u.Id == selectedUnit.UnitId),
+            ItemUnitId = selectedUnit.ItemUnitId,
+            ItemUnit = selectedUnit.ItemUnitId.HasValue ? tempItem.ItemUnits.FirstOrDefault(iu => iu.Id == selectedUnit.ItemUnitId) : null,
+            Qty = tempQty,
+            Rate = tempRate,
+            DiscountPercent = tempDiscPercent,
+            DiscountAmount = tempDiscAmount,
+            Amount = tempAmount,
+            QtyInBaseUnit = qtyInBase
+        });
+
+        RecalculateTotals();
+
+        tempItem = null; tempItemName = ""; selectedUnitValue = null;
+        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
+    }
+
+    private void RemoveLine(PurchaseItem item)
+    {
+        purchase.PurchaseItems.Remove(item);
+        RecalculateTotals();
+    }
+
+    private void EditLine(PurchaseItem item)
+    {
+        _editingItem = item;
+
+        tempItem = item.Item;
+        tempItemName = item.Item != null ? $"{item.Item.ItemCode} - {item.Item.Name}" : "";
+        tempQty = item.Qty;
+        tempRate = item.Rate;
+        tempDiscPercent = item.DiscountPercent;
+        tempDiscAmount = item.DiscountAmount;
+        tempAmount = item.Amount;
+
+        tempUnits.Clear();
+        if (item.Item?.BaseUnit != null)
+            tempUnits.Add(new UnitDisplay { Value = -item.Item.UnitId, UnitId = item.Item.UnitId, DisplayName = item.Item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null });
+
+        if (item.Item?.ItemUnits != null)
+        {
+            foreach (var iu in item.Item.ItemUnits)
+            {
+                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+            }
+        }
+
+        UnitDisplay matchedUnit = null;
+
+        if (item.ItemUnitId.HasValue)
+        {
+            matchedUnit = tempUnits.FirstOrDefault(u => u.ItemUnitId == item.ItemUnitId);
+        }
+        else
+        {
+            matchedUnit = tempUnits.FirstOrDefault(u => u.UnitId == item.UnitId && u.ItemUnitId == null);
+        }
+
+        selectedUnitValue = matchedUnit?.Value ?? (tempUnits.Any() ? tempUnits.First().Value : (int?)null);
+
+        StateHasChanged();
+    }
+
+    private void UpdateLine()
+    {
+        if (_editingItem == null || tempItem == null || tempQty <= 0) return;
+
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == selectedUnitValue);
+        if (selectedUnit == null) return;
+
+        decimal qtyInBase = tempQty * selectedUnit.Multiplier;
+
+        _editingItem.ItemId = tempItem.Id;
+        _editingItem.Item = tempItem;
+        _editingItem.UnitId = selectedUnit.UnitId;
+        _editingItem.Unit = allUnits.FirstOrDefault(u => u.Id == selectedUnit.UnitId);
+        _editingItem.ItemUnitId = selectedUnit.ItemUnitId;
+        _editingItem.ItemUnit = selectedUnit.ItemUnitId.HasValue ? tempItem.ItemUnits.FirstOrDefault(iu => iu.Id == selectedUnit.ItemUnitId) : null;
+        _editingItem.Qty = tempQty;
+        _editingItem.Rate = tempRate;
+        _editingItem.DiscountPercent = tempDiscPercent;
+        _editingItem.DiscountAmount = tempDiscAmount;
+        _editingItem.Amount = tempAmount;
+        _editingItem.QtyInBaseUnit = qtyInBase;
+
+        RecalculateTotals();
+        CancelEdit();
+    }
+
+    private void CancelEdit()
+    {
+        _editingItem = null;
+        tempItem = null; tempItemName = ""; selectedUnitValue = null;
+        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
+        StateHasChanged();
+    }
+
+    private async Task ClearPurchase()
+    {
+        CancelEdit();
+        await InitializeNewPurchaseAsync();
+        Snackbar.Add("New purchase ready.", Severity.Info);
+    }
+
+    private async Task SavePurchase()
+    {
+        await form.Validate();
+        if (!success) { Snackbar.Add("Please fix validation errors.", Severity.Warning); return; }
+        if (!purchase.PurchaseItems.Any()) { Snackbar.Add("Please add at least one item.", Severity.Warning); return; }
+
+        _isProcessing = true;
+        try
+        {
+            purchase.Date = purchaseDate ?? DateTime.Now;
+            if (purchase.Supplier == null) { Snackbar.Add("Supplier is required.", Severity.Error); return; }
+            purchase.SupplierId = purchase.Supplier.Id;
+
+            purchase.Supplier = null;
+            foreach (var line in purchase.PurchaseItems)
+            {
+                line.Item = null;
+                line.Unit = null;
+                line.ItemUnit = null;
+                line.Purchase = null;
+            }
+
+            if (purchase.Id == 0)
+            {
+                await PurchaseService.CreatePurchase(purchase);
+                Snackbar.Add("✅ Purchase saved successfully!", Severity.Success);
+            }
+            else
+            {
+                bool? result = await DialogService.ShowMessageBox(
+                    "Confirm Update",
+                    "Updates will reverse impact of previous items using CURRENT stock settings. Ensure stock is sufficient if reducing quantities (though for Purchase usually it's fine). Proceed?",
+                    yesText: "Update", cancelText: "Cancel");
+
+                if (result != true)
+                {
+                    _isProcessing = false;
+                    return;
+                }
+
+                await PurchaseService.UpdatePurchase(purchase);
+                Snackbar.Add("✅ Purchase updated successfully!", Severity.Success);
+            }
+
+            await InitializeNewPurchaseAsync();
+            await LoadList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving purchase: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+}

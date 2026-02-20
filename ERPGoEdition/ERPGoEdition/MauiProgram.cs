@@ -1,9 +1,10 @@
-﻿using Refit;
+using Refit;
 using ERPGOAPPLICATION.Interfaces;
 using ERPGOINFRASTRUCTURE; // For AddInfrastructureServices
 using ERPGoEdition.Shared;   // For AddApiClientServices
 using ERPGoEdition.Shared.Services;
 using ERPGoEdition.Services;
+using ERPGOINFRASTRUCTURE.Services;
 using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 
@@ -25,23 +26,25 @@ namespace ERPGoEdition
             // Add device-specific services used by the ERPGoEdition.Shared project
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<ITabService, TabService>();
+            builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
+            builder.Services.AddScoped<ICategoryService, CategoryService>();
 
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddMudServices();
 
             // Auth Configuration
-            // Read from AppPreferences, default to Direct Mode (false)
-            bool useApi = Preferences.Get("UseApi", false); 
+            // FORCE DIRECT MODE for debugging/consistency
+            bool useApi = false; // Preferences.Get("UseApi", true); 
 
             if (useApi)
             {
                 // API Mode - Use localhost for testing, change IP for device
-                builder.Services.AddApiClientServices(new Uri("https://localhost:7123"));
+                builder.Services.AddApiClientServices(new Uri("https://localhost:7205"));
             }
             else
             {
                 // Direct Mode
-                string connectionString = "Server=DESKTOP-U0M528H\\SQLEXPRESS;Database=ERPGoEdition;User Id=sa;Password=8190;TrustServerCertificate=True;MultipleActiveResultSets=true";
+                string connectionString = "Server=.\\SQLEXPRESS01;Database=ERPGoEdition;User Id=sa1;Password=5018;TrustServerCertificate=True;MultipleActiveResultSets=true";
                 builder.Services.AddInfrastructureServices(connectionString);
             }
 
