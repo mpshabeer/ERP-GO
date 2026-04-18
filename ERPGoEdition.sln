@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36518.9
+# Visual Studio Version 18
+VisualStudioVersion = 18.2.11415.280 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ERPGoEdition", "ERPGoEdition\ERPGoEdition\ERPGoEdition.csproj", "{1460CEBF-81E5-4B1A-8DCA-450DB2D05BA2}"
 EndProject
@@ -16,6 +16,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ERPGOApplication", "ERPGOAPPLICATION\ERPGOApplication.csproj", "{3C004803-15F0-402A-BE25-BE1B963FE5BC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ERPGOInfrastructure", "ERPGOINFRASTRUCTURE\ERPGOInfrastructure.csproj", "{DBF35FD9-E29B-4019-ADD6-B9A50F966660}"
+EndProject
+Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "ERPGoEdition DB", "ERPGoEdition DB\ERPGoEdition DB.sqlproj", "{EBC0C0A4-49D8-4670-8EA1-2B00F81A1EED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,6 +53,12 @@ Global
 		{DBF35FD9-E29B-4019-ADD6-B9A50F966660}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DBF35FD9-E29B-4019-ADD6-B9A50F966660}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DBF35FD9-E29B-4019-ADD6-B9A50F966660}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EBC0C0A4-49D8-4670-8EA1-2B00F81A1EED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EBC0C0A4-49D8-4670-8EA1-2B00F81A1EED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EBC0C0A4-49D8-4670-8EA1-2B00F81A1EED}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{EBC0C0A4-49D8-4670-8EA1-2B00F81A1EED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EBC0C0A4-49D8-4670-8EA1-2B00F81A1EED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EBC0C0A4-49D8-4670-8EA1-2B00F81A1EED}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
