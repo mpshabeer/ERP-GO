@@ -1,0 +1,239 @@
+@page "/stock-report"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.DTOs
+@using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Services
+@inject IStockService StockService
+@inject ICategoryService CategoryService
+@inject IItemService ItemService
+@inject IStockReportPdfService PdfService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
+
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;" class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4" Color="Color.Primary"><b>Stock Register Report</b></MudText>
+
+    <!-- Filter Card -->
+    <div style="flex: 0 0 auto;" class="mb-4">
+        <MudCard Elevation="2">
+            <MudCardContent Class="py-3 px-4">
+                <MudGrid Class="align-center" Spacing="2">
+                    <MudItem xs="12" sm="2">
+                        <MudDatePicker @bind-Date="_fromDate" Label="From Date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudDatePicker @bind-Date="_toDate" Label="To Date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudSelect T="int?" @bind-Value="_categoryId" Label="Category" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true">
+                            @foreach (var cat in _categories)
+                            {
+                                <MudSelectItem T="int?" Value="cat.Id">@cat.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudTextField Value="@(_selectedItem?.Name ?? "(All Items)")" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Adornment="Adornment.End" 
+                                      AdornmentIcon="@(_selectedItem == null ? Icons.Material.Filled.Search : Icons.Material.Filled.Clear)" 
+                                      OnAdornmentClick="ToggleItemSearch" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2" Class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="LoadReport" Size="Size.Small" FullWidth="true">Search</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearFilters" Size="Size.Small">Clear</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </div>
+
+    <!-- Action Bar -->
+    <div style="flex: 0 0 auto;" class="d-flex justify-space-between align-center mb-2">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">Showing <b>@_reportLines.Count</b> items</MudText>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Visibility" Size="Size.Small" Disabled="@(!_reportLines.Any())" OnClick="PreviewPdf">Preview PDF</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" Disabled="@(!_reportLines.Any())" OnClick="DownloadPdf">Download PDF</MudButton>
+        </div>
+    </div>
+
+    <!-- Data Grid -->
+    <div style="flex: 1; overflow-y: auto; min-height: 0;">
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center align-center h-100">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+        else if (!_reportLines.Any() && _hasSearched)
+        {
+            <MudPaper Elevation="0" Class="d-flex flex-column align-center justify-center pa-8" Style="min-height: 200px; border: 2px dashed #e0e0e0;">
+                <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Large" Color="Color.Tertiary" />
+                <MudText Typo="Typo.body1" Class="mt-2" Color="Color.Tertiary">No stock data found for these filters.</MudText>
+            </MudPaper>
+        }
+        else if (_reportLines.Any())
+        {
+            <MudTable Items="@_reportLines" Dense="true" Hover="true" Bordered="true" Striped="true" FixedHeader="true" Height="100%">
+                <HeaderContent>
+                    <MudTh>Code</MudTh>
+                    <MudTh>Item Name</MudTh>
+                    <MudTh>Category</MudTh>
+                    <MudTh>Unit</MudTh>
+                    <MudTh Style="text-align:right;">Opening</MudTh>
+                    <MudTh Style="text-align:right;">Inward</MudTh>
+                    <MudTh Style="text-align:right;">Outward</MudTh>
+                    <MudTh Style="text-align:right; font-weight:bold; font-size: 1.1em;">Closing</MudTh>
+                    <MudTh Style="text-align:right;">Rate</MudTh>
+                    <MudTh Style="text-align:right; font-weight:bold;">Stock Value</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.ItemCode</MudTd>
+                    <MudTd>@context.ItemName</MudTd>
+                    <MudTd>@context.CategoryName</MudTd>
+                    <MudTd>@context.UnitName</MudTd>
+                    <MudTd Style="text-align:right;">@context.OpeningQty.ToString("N2")</MudTd>
+                    <MudTd Style="text-align:right; color: #388E3C; font-weight: bold;">@context.InwardQty.ToString("N2")</MudTd>
+                    <MudTd Style="text-align:right; color: #D32F2F; font-weight: bold;">@context.OutwardQty.ToString("N2")</MudTd>
+                    <MudTd Style="text-align:right; font-weight:bold; font-size: 1.1em;">@context.ClosingQty.ToString("N2")</MudTd>
+                    <MudTd Style="text-align:right; color: #616161;">@context.ItemRate.ToString("N2")</MudTd>
+                    <MudTd Style="text-align:right; font-weight:bold; color: #1565C0;">@context.StockValue.ToString("N2")</MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <!-- Create a manual footer for Total Stock Value since MudTable requires FooterContent which repeats per column, or we can use MudTFootRow inside. Wait, better to just put it below the table -->
+                </PagerContent>
+            </MudTable>
+            <MudPaper Elevation="2" Class="pa-4 mt-2 d-flex justify-end align-center" Style="background-color: #f1f8e9; border: 1px solid #c5e1a5;">
+                <MudText Typo="Typo.h6" Color="Color.Primary"><b>Total Stock Value:</b> @_reportLines.Sum(x => x.StockValue).ToString("N2")</MudText>
+            </MudPaper>
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime? _fromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+    private DateTime? _toDate = DateTime.Now.Date;
+    private int? _categoryId;
+    private Item? _selectedItem;
+
+    private List<StockReportLine> _reportLines = new();
+    private List<Category> _categories = new();
+    private List<Item> _allItems = new();
+    
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    private bool _isPdfLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await CategoryService.GetAllCategoriesAsync();
+        // ItemService.GetAllItemsAsync() is no longer needed since we use dialog
+    }
+
+    private async Task OpenItemSearch()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = DialogService.Show<ERPGoEdition.Shared.Dialogs.ItemSearchDialog>("Search Item", options);
+        var result = await dialog.Result;
+        
+        if (!result.Canceled && result.Data is Item selected)
+        {
+            _selectedItem = selected;
+        }
+    }
+
+    private void ClearItem()
+    {
+        _selectedItem = null;
+    }
+
+    private async Task ToggleItemSearch()
+    {
+        if (_selectedItem == null)
+            await OpenItemSearch();
+        else
+            ClearItem();
+    }
+    
+    private StockReportRequest BuildRequest()
+    {
+        return new StockReportRequest
+        {
+            FromDate = _fromDate ?? DateTime.Now.Date,
+            ToDate = _toDate ?? DateTime.Now.Date,
+            CategoryId = _categoryId,
+            ItemId = _selectedItem?.Id
+        };
+    }
+
+    private async Task LoadReport()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+
+        try
+        {
+            _reportLines = await StockService.GetStockReportAsync(BuildRequest());
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading report: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _fromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+        _toDate = DateTime.Now.Date;
+        _categoryId = null;
+        _selectedItem = null;
+        _reportLines.Clear();
+        _hasSearched = false;
+    }
+
+    private async Task PreviewPdf()
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PdfService.GenerateStockReportPdfAsync(BuildRequest());
+            var parameters = new DialogParameters { ["PdfBytes"] = bytes };
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            DialogService.Show<Dialogs.PdfPreviewDialog>($"Preview Stock Report", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
+    private async Task DownloadPdf()
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PdfService.GenerateStockReportPdfAsync(BuildRequest());
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", $"StockReport_{DateTime.Now:yyyyMMdd}.pdf", "application/pdf", bytes);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading PDF: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+}

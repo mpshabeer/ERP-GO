@@ -29,6 +29,27 @@ public class SupplierService : ISupplierService
     public async Task<Supplier> AddSupplierAsync(Supplier supplier)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
+        
+        if (supplier.AccountId == null || supplier.AccountId <= 0)
+        {
+            var creditorsHead = await context.AccountHeads.FirstOrDefaultAsync(h => h.Name == "Sundry Creditors");
+            if (creditorsHead != null)
+            {
+                var account = new Account
+                {
+                    Name = supplier.Name + " Account",
+                    Code = string.Empty,
+                    AccountHeadId = creditorsHead.Id,
+                    IsDefault = false,
+                    IsActive = true
+                };
+                context.Accounts.Add(account);
+                await context.SaveChangesAsync();
+                
+                supplier.AccountId = account.Id;
+            }
+        }
+
         context.Suppliers.Add(supplier);
         await context.SaveChangesAsync();
         return supplier;
@@ -36,6 +57,7 @@ public class SupplierService : ISupplierService
 
     public async Task<Supplier> UpdateSupplierAsync(Supplier supplier)
     {
+        if (supplier.Code == "S1000") throw new InvalidOperationException("Default System Supplier cannot be modified.");
         using var context = await _contextFactory.CreateDbContextAsync();
         var existingSupplier = await context.Suppliers.FirstOrDefaultAsync(s => s.Id == supplier.Id);
         if (existingSupplier != null)
@@ -53,6 +75,7 @@ public class SupplierService : ISupplierService
         var supplier = await context.Suppliers.FirstOrDefaultAsync(s => s.Id == id);
         if (supplier != null)
         {
+            if (supplier.Code == "S1000") throw new InvalidOperationException("Default System Supplier cannot be deleted.");
             supplier.IsActive = false;
             await context.SaveChangesAsync();
         }

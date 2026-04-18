@@ -251,4 +251,73 @@ public class StockService : IStockService
             TotalCount = totalCount
         };
     }
+
+    public async Task<List<StockReportLine>> GetStockReportAsync(StockReportRequest request)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        
+        var query = context.Items
+            .Include(i => i.Category)
+            .Include(i => i.BaseUnit)
+            .AsNoTracking();
+
+        if (request.CategoryId.HasValue && request.CategoryId.Value > 0)
+        {
+            query = query.Where(i => i.CategoryId == request.CategoryId.Value);
+        }
+
+        if (request.ItemId.HasValue && request.ItemId.Value > 0)
+        {
+            query = query.Where(i => i.Id == request.ItemId.Value);
+        }
+
+        var items = await query.ToListAsync();
+
+        if (!items.Any()) return new List<StockReportLine>();
+
+        var itemIds = items.Select(i => i.Id).ToList();
+        
+        // We load all ledger entries for the items to calculate opening and periodic movement 
+        // (doing this in memory avoids very complex SQL aggregation overhead when dataset is small/medium).
+        var ledgers = await context.StockLedger
+            .AsNoTracking()
+            .Where(l => itemIds.Contains(l.ItemId))
+            .ToListAsync();
+
+        var reportLines = new List<StockReportLine>();
+
+        foreach (var item in items)
+        {
+            var itemLedgers = ledgers.Where(l => l.ItemId == item.Id).ToList();
+
+            var openingQty = itemLedgers
+                .Where(l => l.Date.Date < request.FromDate.Date)
+                .Sum(l => l.Qty);
+
+            var inwardQty = itemLedgers
+                .Where(l => l.Date.Date >= request.FromDate.Date && l.Date.Date <= request.ToDate.Date && l.Qty > 0)
+                .Sum(l => l.Qty);
+
+            var outwardQty = itemLedgers
+                .Where(l => l.Date.Date >= request.FromDate.Date && l.Date.Date <= request.ToDate.Date && l.Qty < 0)
+                .Sum(l => Math.Abs(l.Qty));
+
+            reportLines.Add(new StockReportLine
+            {
+                ItemId = item.Id,
+                ItemCode = item.ItemCode ?? "",
+                ItemName = item.Name ?? "",
+                CategoryName = item.Category?.Name ?? "Uncategorized",
+                UnitName = item.BaseUnit?.Name ?? "Unit",
+                OpeningQty = openingQty,
+                InwardQty = inwardQty,
+                OutwardQty = outwardQty,
+                ClosingQty = openingQty + inwardQty - outwardQty,
+                ItemRate = item.PurchaseRate,
+                StockValue = (openingQty + inwardQty - outwardQty) * item.PurchaseRate
+            });
+        }
+
+        return reportLines.OrderBy(r => r.ItemName).ToList();
+    }
 }

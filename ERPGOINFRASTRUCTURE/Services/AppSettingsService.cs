@@ -73,7 +73,13 @@ public class AppSettingsService : IAppSettingsService
                     ItemCodePrefix = settings.FirstOrDefault(s => s.Key == "ItemCodePrefix")?.Value ?? "ITEM-",
                     CategoryCodePrefix = settings.FirstOrDefault(s => s.Key == "CategoryCodePrefix")?.Value ?? "CAT-",
                     SubCategoryCodePrefix = settings.FirstOrDefault(s => s.Key == "SubCategoryCodePrefix")?.Value ?? "SUB-",
-                    ItemCodeStartNumber = int.Parse(settings.FirstOrDefault(s => s.Key == "ItemCodeStartNumber")?.Value ?? "1000")
+                    ItemCodeStartNumber = int.Parse(settings.FirstOrDefault(s => s.Key == "ItemCodeStartNumber")?.Value ?? "1000"),
+                    CompanyName = settings.FirstOrDefault(s => s.Key == "CompanyName")?.Value ?? "ERP Go Edition",
+                    CompanyAddress = settings.FirstOrDefault(s => s.Key == "CompanyAddress")?.Value ?? "Your Company Address, City, Country",
+                    CompanyPhone = settings.FirstOrDefault(s => s.Key == "CompanyPhone")?.Value ?? "",
+                    CompanyEmail = settings.FirstOrDefault(s => s.Key == "CompanyEmail")?.Value ?? "",
+                    CompanyTaxNumber = settings.FirstOrDefault(s => s.Key == "CompanyTaxNumber")?.Value ?? "",
+                    InvoiceFooterMessage = settings.FirstOrDefault(s => s.Key == "InvoiceFooterMessage")?.Value ?? "Thank you for your business!"
                 };
             }
             catch (Exception)
@@ -100,7 +106,13 @@ public class AppSettingsService : IAppSettingsService
             { "ItemCodePrefix", model.ItemCodePrefix },
             { "CategoryCodePrefix", model.CategoryCodePrefix },
             { "SubCategoryCodePrefix", model.SubCategoryCodePrefix },
-            { "ItemCodeStartNumber", model.ItemCodeStartNumber.ToString() }
+            { "ItemCodeStartNumber", model.ItemCodeStartNumber.ToString() },
+            { "CompanyName", model.CompanyName ?? "" },
+            { "CompanyAddress", model.CompanyAddress ?? "" },
+            { "CompanyPhone", model.CompanyPhone ?? "" },
+            { "CompanyEmail", model.CompanyEmail ?? "" },
+            { "CompanyTaxNumber", model.CompanyTaxNumber ?? "" },
+            { "InvoiceFooterMessage", model.InvoiceFooterMessage ?? "" }
         };
 
         foreach (var kvp in keys)

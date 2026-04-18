@@ -1,4 +1,6 @@
 @page "/category-master"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using ERPGOAPPLICATION.Interfaces
 @using ERPGODomain.Entities
 @inject ICategoryService CategoryService

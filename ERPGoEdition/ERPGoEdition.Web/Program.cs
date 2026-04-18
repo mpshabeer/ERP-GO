@@ -6,7 +6,9 @@ using ERPGoEdition.Web.Services;
 using MudBlazor.Services;
 using ERPGOINFRASTRUCTURE.Services;
 using ERPGOAPPLICATION.Interfaces;
-
+using QuestPDF.Infrastructure;
+using Blazored.LocalStorage;
+using Microsoft.AspNetCore.Components.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,11 +22,33 @@ builder.Services.AddSingleton<ITabService, TabService>();
 builder.Services.AddMudServices();
 builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
 builder.Services.AddSingleton<ICategoryService, CategoryService>(); // Singleton for Blazor Server
+builder.Services.AddBlazoredLocalStorage();
+
+// Auth for interactive Server components
+builder.Services.AddAuthenticationCore();
+builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = "Cookies";
+    })
+    .AddCookie("Cookies", options =>
+    {
+        options.LoginPath = "/login";
+    });
 
 // Auth Services (Web uses Direct DB connection to avoid starting separate API)
 // builder.Services.AddApiClientServices(new Uri("https://localhost:7123")); 
 string connectionString = "Server=.\\SQLEXPRESS01;Database=ERPGoEdition;User Id=sa1;Password=5018;TrustServerCertificate=True;MultipleActiveResultSets=true";
 builder.Services.AddInfrastructureServices(connectionString);
+
+// PDF generation — directly in-process using ISalesService (no separate API needed)
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+builder.Services.AddScoped<IInvoicePdfService, InvoicePdfService>();
+builder.Services.AddScoped<IPurchasePdfService, PurchasePdfService>();
+builder.Services.AddScoped<IStockReportPdfService, StockReportPdfService>();
+builder.Services.AddScoped<IReportPdfService, ReportPdfService>();
+builder.Services.AddScoped<IPurchasePdfService, PurchasePdfService>();
 
 
 
@@ -43,8 +67,14 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(typeof(ERPGoEdition.Shared._Imports).Assembly);
+
+// Seed Data
+await ERPGOINFRASTRUCTURE.Persistence.AccountingDbSeeder.SeedAsync(app.Services);
 
 app.Run();

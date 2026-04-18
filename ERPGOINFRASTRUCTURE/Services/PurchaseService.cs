@@ -99,6 +99,28 @@ public class PurchaseService : IPurchaseService
                     }
                 }
 
+                // 5. Post Accounting Journal Entry
+                var supplier = await context.Suppliers.FindAsync(purchase.SupplierId);
+                var purchaseAccount = await context.Accounts.FirstOrDefaultAsync(a => a.Name == "Purchase Account" && a.IsDefault);
+                
+                if (supplier?.AccountId != null && purchaseAccount != null)
+                {
+                    var je = new JournalEntry
+                    {
+                        VoucherDate = purchase.Date,
+                        VoucherNo = purchase.PurchaseNo ?? purchase.InvoiceNo,
+                        VoucherType = "Purchase",
+                        ReferenceId = purchase.Id,
+                        Narration = $"Supplier Inv: {purchase.InvoiceNo}",
+                        JournalEntryLines = new List<JournalEntryLine>
+                        {
+                            new JournalEntryLine { AccountId = purchaseAccount.Id, Debit = purchase.TotalAmount, Credit = 0 },
+                            new JournalEntryLine { AccountId = supplier.AccountId.Value, Debit = 0, Credit = purchase.TotalAmount }
+                        }
+                    };
+                    context.JournalEntries.Add(je);
+                }
+
                 await context.SaveChangesAsync();
                 await transaction.CommitAsync();
             }
@@ -228,7 +250,8 @@ public class PurchaseService : IPurchaseService
                 Rate = newLine.Rate,
                 DiscountPercent = newLine.DiscountPercent,
                 DiscountAmount = newLine.DiscountAmount,
-                Amount = newLine.Amount
+                Amount = newLine.Amount,
+                QtyPerBaseUnit = newLine.QtyPerBaseUnit
             };
 
             context.PurchaseItems.Add(lineEntity);
@@ -241,6 +264,35 @@ public class PurchaseService : IPurchaseService
                 item.CurrentStock += qtyAdded;
                 context.Items.Update(item);
             }
+        }
+
+        // 6. Update Accounting Journal Entry
+        var oldJe = await context.JournalEntries.Include(j => j.JournalEntryLines)
+            .FirstOrDefaultAsync(j => j.ReferenceId == existingPurchase.Id && j.VoucherType == "Purchase");
+        if (oldJe != null)
+        {
+            context.JournalEntries.Remove(oldJe);
+        }
+
+        var supplier = await context.Suppliers.FindAsync(purchase.SupplierId);
+        var purchaseAccount = await context.Accounts.FirstOrDefaultAsync(a => a.Name == "Purchase Account" && a.IsDefault);
+        
+        if (supplier?.AccountId != null && purchaseAccount != null)
+        {
+            var je = new JournalEntry
+            {
+                VoucherDate = purchase.Date,
+                VoucherNo = existingPurchase.PurchaseNo ?? existingPurchase.InvoiceNo,
+                VoucherType = "Purchase",
+                ReferenceId = existingPurchase.Id,
+                Narration = $"Supplier Inv: {existingPurchase.InvoiceNo} (Updated)",
+                JournalEntryLines = new List<JournalEntryLine>
+                {
+                    new JournalEntryLine { AccountId = purchaseAccount.Id, Debit = purchase.TotalAmount, Credit = 0 },
+                    new JournalEntryLine { AccountId = supplier.AccountId.Value, Debit = 0, Credit = purchase.TotalAmount }
+                }
+            };
+            context.JournalEntries.Add(je);
         }
 
         await context.SaveChangesAsync();
@@ -264,8 +316,63 @@ public class PurchaseService : IPurchaseService
                      context.Items.Update(item);
                  }
              }
+
+             // Delete related Journal Entry
+             var oldJe = await context.JournalEntries.Include(j => j.JournalEntryLines)
+                 .FirstOrDefaultAsync(j => j.ReferenceId == purchase.Id && j.VoucherType == "Purchase");
+             if (oldJe != null)
+             {
+                 context.JournalEntries.Remove(oldJe);
+             }
+
              context.Purchases.Remove(purchase);
              await context.SaveChangesAsync();
          }
+    }
+
+    public async Task<List<ItemWiseReportLine>> GetPurchaseReportAsync(PurchaseReportRequest request)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        var query = context.PurchaseItems
+            .Include(i => i.Purchase)
+                .ThenInclude(p => p.Supplier)
+            .Include(i => i.Item)
+                .ThenInclude(it => it.Category)
+            .Include(i => i.Unit)
+            .AsQueryable();
+
+        if (request.SupplierId.HasValue)
+            query = query.Where(i => i.Purchase != null && i.Purchase.SupplierId == request.SupplierId.Value);
+            
+        if (request.CategoryId.HasValue)
+            query = query.Where(i => i.Item != null && i.Item.CategoryId == request.CategoryId.Value);
+
+        if (request.ItemId.HasValue)
+            query = query.Where(i => i.ItemId == request.ItemId.Value);
+
+        query = query.Where(i => i.Purchase != null && i.Purchase.Date >= request.FromDate.Date);
+        query = query.Where(i => i.Purchase != null && i.Purchase.Date <= request.ToDate.Date.AddDays(1).AddTicks(-1));
+
+        var items = await query
+            .OrderByDescending(i => i.Purchase!.Date)
+            .ThenByDescending(i => i.PurchaseId)
+            .ToListAsync();
+
+        return items.Select(i => new ItemWiseReportLine
+        {
+            Date = i.Purchase!.Date,
+            DocumentNo = !string.IsNullOrWhiteSpace(i.Purchase.InvoiceNo) ? i.Purchase.InvoiceNo : (i.Purchase.PurchaseNo ?? ""),
+            PartyName = i.Purchase.Supplier?.Name ?? "Unknown Supplier",
+            ItemId = i.ItemId,
+            ItemCode = i.Item?.ItemCode ?? "",
+            ItemName = i.Item?.Name ?? "",
+            CategoryName = i.Item?.Category?.Name ?? "Uncategorized",
+            UnitName = i.Unit?.Name ?? "Unit",
+            Qty = i.Qty,
+            QtyPerBaseUnit = i.QtyPerBaseUnit,
+            Rate = i.Rate,
+            Amount = i.Amount
+        }).ToList();
     }
 }

@@ -12,10 +12,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="QuestPDF" Version="2026.2.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.1.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ERPGOINFRASTRUCTURE\ERPGOInfrastructure.csproj" />
+    <ProjectReference Include="..\ERPGoEdition\ERPGoEdition.Shared\ERPGoEdition.Shared.csproj" />
   </ItemGroup>
 
 </Project>

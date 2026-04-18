@@ -1,4 +1,6 @@
 @page "/supplier-master"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using ERPGOAPPLICATION.Interfaces
 @using ERPGODomain.Entities
 @inject ISupplierService SupplierService
@@ -106,7 +108,7 @@
                             <MudIcon Icon="@(context.IsActive ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" />
                         </MudTd>
                         <MudTd DataLabel="Actions">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" Disabled="@(context.Code == "S1000")" />
                         </MudTd>
                     </RowTemplate>
                     <PagerContent>
@@ -178,6 +180,11 @@
 
     private void Edit(Supplier supplier)
     {
+        if (supplier.Code == "S1000")
+        {
+            Snackbar.Add("Default System Supplier cannot be edited.", Severity.Warning);
+            return;
+        }
         // Simple clone for editing
         currentSupplier = new Supplier
         {
@@ -198,6 +205,13 @@
 
     private async Task Delete(int id)
     {
+        var supplier = Suppliers.FirstOrDefault(s => s.Id == id);
+        if (supplier?.Code == "S1000")
+        {
+            Snackbar.Add("Default System Supplier cannot be deleted.", Severity.Warning);
+            return;
+        }
+
         bool? result = await DialogService.ShowMessageBox(
             "Warning", 
             "Deleting can not be undone!", 

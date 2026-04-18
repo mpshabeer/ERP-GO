@@ -12,7 +12,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Blazored.LocalStorage" Version="4.3.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="MudBlazor" Version="7.15.0" />
+    <PackageReference Include="QuestPDF" Version="2026.2.1" />
     <PackageReference Include="Refit.HttpClientFactory" Version="9.0.2" />
   </ItemGroup>
 

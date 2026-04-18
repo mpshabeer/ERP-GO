@@ -1,0 +1,109 @@
+@page "/settings"
+@using ERPGOAPPLICATION.Interfaces
+@inject IAppSettingsService AppSettingsService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">System Settings</MudText>
+
+@if (_isLoading)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else if (_settings != null)
+{
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+        <MudTabPanel Text="Company Profile" Icon="@Icons.Material.Filled.Business">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_settings.CompanyName" Label="Company Name" Variant="Variant.Outlined" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_settings.CompanyTaxNumber" Label="Tax Number / VAT" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_settings.CompanyAddress" Label="Company Address" Variant="Variant.Outlined" Lines="3" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_settings.CompanyPhone" Label="Phone Number" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_settings.CompanyEmail" Label="Email Address" Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Invoice Settings" Icon="@Icons.Material.Filled.Receipt">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_settings.InvoiceFooterMessage" Label="Invoice Footer Message" Variant="Variant.Outlined" Lines="2" HelperText="This message appears at the bottom of the PDF invoice (e.g., 'Thank you for your business!')" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Numbering Settings" Icon="@Icons.Material.Filled.Numbers">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_settings.AutoGenerateItemCode" Label="Auto-Generate Item Codes" Color="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_settings.ItemCodePrefix" Label="Item Code Prefix" Variant="Variant.Outlined" Disabled="!_settings.AutoGenerateItemCode" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_settings.CategoryCodePrefix" Label="Category Code Prefix" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_settings.SubCategoryCodePrefix" Label="Sub-Category Code Prefix" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_settings.ItemCodeStartNumber" Label="Item Code Start Number" Variant="Variant.Outlined" Disabled="!_settings.AutoGenerateItemCode" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+
+    <div class="mt-4 d-flex align-center">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSettings" Disabled="_isSaving">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Saving</MudText>
+            }
+            else
+            {
+                <MudText>Save Settings</MudText>
+            }
+        </MudButton>
+    </div>
+}
+
+@code {
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private AppSettingsModel? _settings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await AppSettingsService.GetSettingsAsync();
+        _isLoading = false;
+    }
+
+    private async Task SaveSettings()
+    {
+        if (_settings == null) return;
+        
+        _isSaving = true;
+        try
+        {
+            await AppSettingsService.SaveSettingsAsync(_settings);
+            Snackbar.Add("Settings saved successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

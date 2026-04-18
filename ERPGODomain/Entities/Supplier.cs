@@ -28,4 +28,10 @@ public class Supplier
     public string ContactPerson { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
+
+    // Link to Chart of Accounts (Sundry Creditors)
+    public int? AccountId { get; set; }
+    
+    [ForeignKey("AccountId")]
+    public Account? Account { get; set; }
 }

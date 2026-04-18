@@ -85,6 +85,28 @@ public class SalesService : ISalesService
                     }
                 }
 
+                // 6. Post Accounting Journal Entry
+                var customer = await context.Customers.FindAsync(invoice.CustomerId);
+                var salesAccount = await context.Accounts.FirstOrDefaultAsync(a => a.Name == "Sales Account" && a.IsDefault);
+                
+                if (customer?.AccountId != null && salesAccount != null)
+                {
+                    var je = new JournalEntry
+                    {
+                        VoucherDate = invoice.Date,
+                        VoucherNo = invoice.InvoiceNo,
+                        VoucherType = "Sales",
+                        ReferenceId = invoice.Id,
+                        Narration = $"Sales Invoice {invoice.InvoiceNo}",
+                        JournalEntryLines = new List<JournalEntryLine>
+                        {
+                            new JournalEntryLine { AccountId = customer.AccountId.Value, Debit = invoice.TotalAmount, Credit = 0 },
+                            new JournalEntryLine { AccountId = salesAccount.Id, Debit = 0, Credit = invoice.TotalAmount }
+                        }
+                    };
+                    context.JournalEntries.Add(je);
+                }
+
                 await context.SaveChangesAsync();
                 await transaction.CommitAsync();
             }
@@ -218,6 +240,7 @@ public class SalesService : ISalesService
                 DiscountPercent = newLine.DiscountPercent,
                 DiscountAmount = newLine.DiscountAmount,
                 Amount = newLine.Amount,
+                QtyPerBaseUnit = newLine.QtyPerBaseUnit,
                 QtyInBaseUnit = newLine.QtyInBaseUnit
             };
 
@@ -232,7 +255,82 @@ public class SalesService : ISalesService
             }
         }
 
+        // 6. Update Accounting Journal Entry
+        var oldJe = await context.JournalEntries.Include(j => j.JournalEntryLines)
+            .FirstOrDefaultAsync(j => j.ReferenceId == existingInvoice.Id && j.VoucherType == "Sales");
+        if (oldJe != null)
+        {
+            context.JournalEntries.Remove(oldJe);
+        }
+
+        var customer = await context.Customers.FindAsync(invoice.CustomerId);
+        var salesAccount = await context.Accounts.FirstOrDefaultAsync(a => a.Name == "Sales Account" && a.IsDefault);
+        
+        if (customer?.AccountId != null && salesAccount != null)
+        {
+            var je = new JournalEntry
+            {
+                VoucherDate = invoice.Date,
+                VoucherNo = existingInvoice.InvoiceNo,
+                VoucherType = "Sales",
+                ReferenceId = existingInvoice.Id,
+                Narration = $"Sales Invoice {existingInvoice.InvoiceNo} (Updated)",
+                JournalEntryLines = new List<JournalEntryLine>
+                {
+                    new JournalEntryLine { AccountId = customer.AccountId.Value, Debit = invoice.TotalAmount, Credit = 0 },
+                    new JournalEntryLine { AccountId = salesAccount.Id, Debit = 0, Credit = invoice.TotalAmount }
+                }
+            };
+            context.JournalEntries.Add(je);
+        }
+
         await context.SaveChangesAsync();
         return existingInvoice;
+    }
+
+    public async Task<List<ItemWiseReportLine>> GetSalesReportAsync(SalesReportRequest request)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        var query = context.SalesInvoiceItems
+            .Include(i => i.SalesInvoice)
+                .ThenInclude(inv => inv.Customer)
+            .Include(i => i.Item)
+                .ThenInclude(it => it.Category)
+            .Include(i => i.Unit)
+            .AsQueryable();
+
+        if (request.CustomerId.HasValue)
+            query = query.Where(i => i.SalesInvoice != null && i.SalesInvoice.CustomerId == request.CustomerId.Value);
+            
+        if (request.CategoryId.HasValue)
+            query = query.Where(i => i.Item != null && i.Item.CategoryId == request.CategoryId.Value);
+
+        if (request.ItemId.HasValue)
+            query = query.Where(i => i.ItemId == request.ItemId.Value);
+
+        query = query.Where(i => i.SalesInvoice != null && i.SalesInvoice.Date >= request.FromDate.Date);
+        query = query.Where(i => i.SalesInvoice != null && i.SalesInvoice.Date <= request.ToDate.Date.AddDays(1).AddTicks(-1));
+
+        var items = await query
+            .OrderByDescending(i => i.SalesInvoice!.Date)
+            .ThenByDescending(i => i.SalesInvoiceId)
+            .ToListAsync();
+
+        return items.Select(i => new ItemWiseReportLine
+        {
+            Date = i.SalesInvoice!.Date,
+            DocumentNo = i.SalesInvoice.InvoiceNo,
+            PartyName = i.SalesInvoice.Customer?.Name ?? "Unknown Customer",
+            ItemId = i.ItemId,
+            ItemCode = i.Item?.ItemCode ?? "",
+            ItemName = i.Item?.Name ?? "",
+            CategoryName = i.Item?.Category?.Name ?? "Uncategorized",
+            UnitName = i.Unit?.Name ?? "Unit",
+            Qty = i.Qty,
+            QtyPerBaseUnit = i.QtyPerBaseUnit,
+            Rate = i.Rate,
+            Amount = i.Amount
+        }).ToList();
     }
 }

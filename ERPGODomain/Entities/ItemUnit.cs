@@ -18,14 +18,11 @@ public class ItemUnit
     [ForeignKey(nameof(UnitId))]
     public Unit? Unit { get; set; }
 
-    public string Name { get; set; } = string.Empty;
-
-    public string Barcode { get; set; } = string.Empty;
-    
-    public string ItemUnitCode { get; set; } = string.Empty; // Code specific to this packing
-
+    /// <summary>
+    /// How many base units make one of this packing unit. E.g. 12 if 1 Box = 12 PCS.
+    /// </summary>
     [Column(TypeName = "decimal(18,2)")]
-    public decimal QtyPerBaseUnit { get; set; } // Conversion Factor
+    public decimal QtyPerBaseUnit { get; set; } = 1;
 
     [Column(TypeName = "decimal(18,2)")]
     public decimal Rate { get; set; } // Selling Price for this unit

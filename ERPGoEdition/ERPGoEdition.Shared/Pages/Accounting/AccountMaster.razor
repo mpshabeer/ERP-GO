@@ -1,0 +1,222 @@
+@page "/account-master"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@inject IAccountingService AccountingService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" GutterBottom="true">Account Master</MudText>
+
+<MudGrid>
+    <!-- Form Section -->
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="25">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">@((currentAccount.Id == 0) ? "Add New Account" : "Edit Account")</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudTextField T="string" Label="Account Name" @bind-Value="currentAccount.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Disabled="@currentAccount.IsDefault" />
+                    
+                    <MudSelect T="int" Label="Account Head" @bind-Value="currentAccount.AccountHeadId" Required="true" RequiredError="Account Head is required." Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-4" Disabled="@currentAccount.IsDefault">
+                        @foreach (var head in AccountHeads)
+                        {
+                            <MudSelectItem Value="@head.Id">@head.Name (@head.AccountGroup?.Name)</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudNumericField T="decimal" Label="Opening Balance" @bind-Value="currentAccount.OpeningBalance" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-4" Immediate="true" Disabled="@currentAccount.IsDefault" />
+                    <MudCheckBox T="bool" Label="Active" @bind-Value="currentAccount.IsActive" Color="Color.Primary" Class="mt-2" Disabled="@currentAccount.IsDefault" />
+                </MudForm>
+            </MudCardContent>
+            <MudCardActions>
+                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await Save())" ButtonType="ButtonType.Button" Disabled="@(_isProcessing || currentAccount.IsDefault)" Class="ml-2">
+                     @if (_isProcessing)
+                     {
+                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                         <MudText Class="ms-2">Processing</MudText>
+                     }
+                     else
+                     {
+                         <MudText>@((currentAccount.Id == 0) ? "Save" : "Update")</MudText>
+                     }
+                 </MudButton>
+                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="Reset" Class="ml-2">Reset</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+
+    <!-- Grid Section -->
+    <MudItem xs="12" md="8">
+        <MudCard Elevation="25">
+             <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Accounts List</MudText>
+                </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                 </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTable Items="@Accounts" Hover="true" Striped="true" Bordered="true" Dense="true" Filter="new Func<Account,bool>(FilterFunc)" OnRowClick="@(args => Edit(args.Item))" T="Account">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Head</MudTh>
+                        <MudTh>Group</MudTh>
+                        <MudTh>Opening Bal</MudTh>
+                        <MudTh>System Default</MudTh>
+                        <MudTh>Active</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Head">@context.AccountHead?.Name</MudTd>
+                        <MudTd DataLabel="Group">@context.AccountHead?.AccountGroup?.Name</MudTd>
+                        <MudTd DataLabel="Opening Bal">@context.OpeningBalance</MudTd>
+                        <MudTd DataLabel="System Default">
+                            <MudChip T="string" Color="@(context.IsDefault ? Color.Warning : Color.Default)" Size="Size.Small">@(context.IsDefault ? "Yes" : "No")</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Active">
+                            <MudIcon Icon="@(context.IsActive ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" />
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" Disabled="@context.IsDefault" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<Account> Accounts = new List<Account>();
+    private List<AccountHead> AccountHeads = new List<AccountHead>();
+    private Account currentAccount = new Account();
+    private string searchString = "";
+    private bool success;
+    private MudForm form = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadData();
+            currentAccount.IsActive = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadData()
+    {
+        Accounts = await AccountingService.GetAccountsAsync();
+        AccountHeads = await AccountingService.GetAccountHeadsAsync();
+    }
+
+    private bool _isProcessing = false;
+
+    private async Task Save()
+    {
+        if (form == null) return;
+        await form.Validate();
+        
+        if (!form.IsValid) 
+        {
+             Snackbar.Add("Please fill required fields", Severity.Warning);
+             return;
+        }
+
+        if (currentAccount.IsDefault)
+        {
+             Snackbar.Add("System default accounts cannot be modified.", Severity.Error);
+             return;
+        }
+
+        _isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            if (currentAccount.Id == 0)
+            {
+                await AccountingService.CreateAccountAsync(currentAccount);
+                Snackbar.Add("Account saved successfully", Severity.Success);
+            }
+            else
+            {
+                await AccountingService.UpdateAccountAsync(currentAccount);
+                Snackbar.Add("Account updated successfully", Severity.Success);
+            }
+            
+            await LoadData();
+            Reset();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Edit(Account account)
+    {
+        currentAccount = new Account 
+        { 
+            Id = account.Id, 
+            Name = account.Name, 
+            AccountHeadId = account.AccountHeadId, 
+            OpeningBalance = account.OpeningBalance, 
+            IsActive = account.IsActive,
+            IsDefault = account.IsDefault
+        };
+        StateHasChanged();
+    }
+
+    private async Task Delete(int id)
+    {
+        var acc = Accounts.FirstOrDefault(a => a.Id == id);
+        if (acc != null && acc.IsDefault)
+        {
+            Snackbar.Add("System default accounts cannot be deleted.", Severity.Error);
+            return;
+        }
+
+        try
+        {
+            await AccountingService.DeleteAccountAsync(id);
+            await LoadData();
+            Snackbar.Add("Account deleted", Severity.Success);
+            if (currentAccount.Id == id) Reset();
+        }
+        catch(Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void Reset()
+    {
+        currentAccount = new Account { IsActive = true };
+        form?.ResetValidation();
+        StateHasChanged();
+    }
+
+    private bool FilterFunc(Account acc)
+    {
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (acc.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (acc.AccountHead?.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+}

@@ -11,4 +11,5 @@ public interface IPurchaseService
     Task<PagedResult<Purchase>> GetPurchasesAsync(PurchaseSearchRequest request);
     Task<Purchase?> GetPurchaseByIdAsync(int id);
     Task DeletePurchaseAsync(int id);
+    Task<List<ItemWiseReportLine>> GetPurchaseReportAsync(PurchaseReportRequest request);
 }

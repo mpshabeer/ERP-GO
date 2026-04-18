@@ -1,15 +1,29 @@
 using ERPGOAPPLICATION.DTOs;
 using ERPGOAPPLICATION.Interfaces;
+using ERPGOAPI.Reports;
 using ERPGODomain.Entities;
 using ERPGOINFRASTRUCTURE;
 using ERPGOINFRASTRUCTURE.Services;
 using Microsoft.AspNetCore.Mvc;
+using QuestPDF.Fluent;
+using QuestPDF.Infrastructure;
+using Unit = ERPGODomain.Entities.Unit;
+
+// Configure QuestPDF community license (free for revenue < $1M)
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 builder.Services.AddAuthorization();
+
+// Configure Minimal APIs JSON serialization to ignore object cycles
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+});
 
 // Register Core Services (Infrastructure)
 builder.Services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
@@ -32,7 +46,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
@@ -49,8 +64,16 @@ app.MapPost("/api/auth/login", async ([FromBody] LoginRequest request, IAuthServ
 })
 .WithName("Login");
 
+app.MapPost("/api/auth/change-password", async ([FromBody] ChangePasswordRequest request, IAuthService authService) =>
+{
+    var success = await authService.ChangePasswordAsync(request);
+    if (success) return Results.Ok();
+    return Results.BadRequest("Invalid current password or user not found.");
+});
+
 // Unit Endpoints
 app.MapGet("/api/units", async (IUnitService service) => await service.GetAllUnitsAsync());
+app.MapGet("/api/units/all", async (IUnitService service) => await service.GetAllUnitsIncludeInactiveAsync());
 app.MapGet("/api/units/{id}", async (int id, IUnitService service) => 
     await service.GetUnitByIdAsync(id) is Unit unit ? Results.Ok(unit) : Results.NotFound());
 app.MapPost("/api/units", async ([FromBody] Unit unit, IUnitService service) => {
@@ -340,6 +363,89 @@ app.MapDelete("/api/categories/{id}", async (int id, ICategoryService service) =
     await service.DeleteCategoryAsync(id);
     return Results.NoContent();
 });
+
+// ─── PDF Report Endpoints ───────────────────────────────────────
+// GET /api/reports/sales/invoice/{id}/pdf  — returns a PDF of the sales invoice
+app.MapGet("/api/reports/sales/invoice/{id}/pdf", async (int id, ISalesService salesService) =>
+{
+    // Fetch all invoices and find the one with matching Id
+    // (uses existing paginated service; for production add a GetByIdAsync endpoint)
+    var request = new ERPGODomain.DTOs.InvoiceSearchRequest { Page = 1, PageSize = 9999 };
+    var result = await salesService.GetInvoicesAsync(request);
+    var invoice = result.Items.FirstOrDefault(x => x.Id == id);
+
+    if (invoice is null)
+        return Results.NotFound($"Invoice #{id} not found.");
+
+    var document = new SalesInvoiceDocument(invoice);
+    var pdfBytes = document.GeneratePdf();
+
+    return Results.File(
+        pdfBytes,
+        contentType: "application/pdf",
+        fileDownloadName: $"Invoice_{invoice.InvoiceNo}.pdf");
+})
+.WithName("GetSalesInvoicePdf");
+
+// ─── GST Sales Invoice Endpoints ────────────────────────────────
+app.MapPost("/api/gstsales/invoice", async ([FromBody] GstSalesInvoice invoice, IGstSalesInvoiceService service) => {
+    try
+    {
+        var created = await service.CreateInvoice(invoice);
+        return Results.Created($"/api/gstsales/invoice/{created.Id}", created);
+    }
+    catch (Exception ex) { return Results.BadRequest(ex.Message); }
+});
+
+app.MapGet("/api/gstsales/invoice/next-number", async (IGstSalesInvoiceService service) => {
+    var number = await service.GetNextInvoiceNumber();
+    return Results.Ok(number);
+});
+
+app.MapGet("/api/gstsales/invoices", async (IGstSalesInvoiceService service) => {
+    var list = await service.GetInvoicesAsync();
+    return Results.Ok(list);
+});
+
+app.MapGet("/api/gstsales/invoice/{id}", async (int id, IGstSalesInvoiceService service) => {
+    var invoice = await service.GetInvoiceByIdAsync(id);
+    return invoice is null ? Results.NotFound() : Results.Ok(invoice);
+});
+
+app.MapPut("/api/gstsales/invoice", async ([FromBody] GstSalesInvoice invoice, IGstSalesInvoiceService service) => {
+    try
+    {
+        var result = await service.UpdateInvoice(invoice);
+        return Results.Ok(result);
+    }
+    catch (Exception ex) { return Results.BadRequest(ex.Message); }
+});
+
+app.MapDelete("/api/gstsales/invoice/{id}", async (int id, IGstSalesInvoiceService service) => {
+    try
+    {
+        await service.DeleteInvoiceAsync(id);
+        return Results.NoContent();
+    }
+    catch (Exception ex) { return Results.BadRequest(ex.Message); }
+});
+
+// GET /api/reports/gstsales/invoice/{id}/pdf
+app.MapGet("/api/reports/gstsales/invoice/{id}/pdf", async (int id, IGstSalesInvoiceService gstService) =>
+{
+    var invoice = await gstService.GetInvoiceByIdAsync(id);
+    if (invoice is null)
+        return Results.NotFound($"GST Invoice #{id} not found.");
+
+    var document = new ERPGoEdition.Shared.Reports.GstSalesInvoiceDocument(invoice);
+    var pdfBytes = document.GeneratePdf();
+
+    return Results.File(
+        pdfBytes,
+        contentType: "application/pdf",
+        fileDownloadName: $"GstInvoice_{invoice.InvoiceNo}.pdf");
+})
+.WithName("GetGstSalesInvoicePdf");
 
 app.Run();
 

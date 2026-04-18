@@ -1,0 +1,318 @@
+@page "/gst-credit-note/{InvoiceId:int}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@using InvoiceEntity = ERPGODomain.Entities.GstSalesInvoice
+@using CreditNoteEntity = ERPGODomain.Entities.GstCreditNote
+@using CreditNoteItemEntity = ERPGODomain.Entities.GstCreditNoteItem
+@inject IGstSalesInvoiceService GstSalesService
+@inject IGstCreditNoteService CreditNoteService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+
+
+<style>
+    .cn-header { background: #B71C1C; color: white; padding: 5px 12px; border-radius: 4px 4px 0 0; }
+    .cn-badge { font-size:10px; background:#FFCDD2; color:#B71C1C; border-radius:10px; padding:1px 8px; font-weight:700; }
+</style>
+
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;">
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-center align-center" style="height: 200px;">
+            <MudProgressCircular Indeterminate="true" Color="Color.Error" />
+        </div>
+    }
+    else if (_originalInvoice == null)
+    {
+        <MudAlert Severity="Severity.Error" Class="ma-4">Invoice not found.</MudAlert>
+    }
+    else
+    {
+        <div style="flex: 1; overflow-y: auto; min-height: 0; padding: 12px;">
+
+            <!-- Title Bar -->
+            <div style="border: 1px solid #FFCDD2; border-radius: 4px; margin-bottom: 10px;">
+                <div class="cn-header d-flex justify-space-between align-center">
+                    <div class="d-flex align-center" style="gap:8px;">
+                        <span style="font-size:13px; font-weight:700;">🧾 CREDIT NOTE (SALES RETURN)</span>
+                        <span class="cn-badge">Ref: @_originalInvoice.InvoiceNo</span>
+                    </div>
+                    <MudButton Variant="Variant.Text" Style="color:white; font-size:11px;" StartIcon="@Icons.Material.Filled.ArrowBack"
+                               OnClick="GoBack" Size="Size.Small">Back to Invoice</MudButton>
+                </div>
+
+                <!-- Reference Invoice Summary -->
+                <div style="padding: 8px 12px; background:#FFF5F5; border-bottom: 1px solid #FFCDD2;">
+                    <MudGrid Spacing="1">
+                        <MudItem xs="6" md="2">
+                            <div style="font-size:10px; color:#777;">ORIGINAL INVOICE</div>
+                            <div style="font-weight:700; color:#B71C1C;">@_originalInvoice.InvoiceNo</div>
+                        </MudItem>
+                        <MudItem xs="6" md="2">
+                            <div style="font-size:10px; color:#777;">INVOICE DATE</div>
+                            <div style="font-weight:600;">@_originalInvoice.Date.ToString("dd-MMM-yyyy")</div>
+                        </MudItem>
+                        <MudItem xs="6" md="3">
+                            <div style="font-size:10px; color:#777;">CUSTOMER</div>
+                            <div style="font-weight:600;">@_originalInvoice.Customer?.Name</div>
+                        </MudItem>
+                        <MudItem xs="6" md="2">
+                            <div style="font-size:10px; color:#777;">ORIGINAL TOTAL</div>
+                            <div style="font-weight:700; color:#1565C0;">@_originalInvoice.TotalAmount.ToString("N2")</div>
+                        </MudItem>
+                        <MudItem xs="6" md="2">
+                            <div style="font-size:10px; color:#777;">STATUS</div>
+                            <span class="cn-badge">🔒 POSTED</span>
+                        </MudItem>
+                    </MudGrid>
+                </div>
+            </div>
+
+            <!-- Credit Note Header -->
+            <div style="border: 1px solid #FFCDD2; border-radius: 4px; margin-bottom: 10px;">
+                <div style="background:#FFEBEE; padding:4px 10px; font-size:11px; font-weight:600; color:#B71C1C; border-bottom:1px solid #FFCDD2;">
+                    CREDIT NOTE DETAILS
+                </div>
+                <div style="padding: 8px 12px;">
+                    <MudGrid Spacing="1">
+                        <MudItem xs="6" md="2">
+                            <MudTextField Value="@_cnNumber" Label="Credit Note No." Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="true" />
+                        </MudItem>
+                        <MudItem xs="6" md="2">
+                            <MudDatePicker Label="Return Date" @bind-Date="_cnDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudSelect T="string" Label="Reason" @bind-Value="_cnReason" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                <MudSelectItem Value="@("GoodsReturn")">Goods Return</MudSelectItem>
+                                <MudSelectItem Value="@("PriceCorrection")">Price Correction</MudSelectItem>
+                                <MudSelectItem Value="@("ItemMistake")">Item Mistake</MudSelectItem>
+                                <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_cnNotes" Label="Notes / Remarks" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </div>
+            </div>
+
+            <!-- Return Items Table -->
+            <div style="border: 1px solid #FFCDD2; border-radius: 4px; margin-bottom: 10px;">
+                <div style="background:#FFEBEE; padding:4px 10px; font-size:11px; font-weight:600; color:#B71C1C; border-bottom:1px solid #FFCDD2;">
+                    RETURN ITEMS  <span style="font-size:9px; font-weight:400; color:#777;">(Enter the quantity being returned — 0 means item is not returned)</span>
+                </div>
+                <MudTable Items="@_cnItems" Dense="true" Hover="true" Bordered="true" Striped="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>#</MudTh>
+                        <MudTh>Item</MudTh>
+                        <MudTh>HSN</MudTh>
+                        <MudTh>Unit</MudTh>
+                        <MudTh Style="text-align:right;">Rate</MudTh>
+                        <MudTh Style="text-align:right;">Orig. Qty</MudTh>
+                        <MudTh Style="text-align:right; color:#B71C1C;">Return Qty</MudTh>
+                        <MudTh Style="text-align:right;">Disc%</MudTh>
+                        <MudTh Style="text-align:right;">Taxable</MudTh>
+                        <MudTh Style="text-align:right;">GST%</MudTh>
+                        <MudTh Style="text-align:right; color:#B71C1C;">GST Amt</MudTh>
+                        <MudTh Style="text-align:right; color:#B71C1C;">Total</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        @{ int ri = _cnItems.IndexOf(context) + 1; }
+                        <MudTd>@ri</MudTd>
+                        <MudTd>
+                            <div style="font-weight:600;">@context.Item?.Name</div>
+                            <div style="font-size:10px; color:#1565C0;">@context.Item?.ItemCode</div>
+                        </MudTd>
+                        <MudTd>@context.HSNCode</MudTd>
+                        <MudTd>@context.Unit?.Name</MudTd>
+                        <MudTd Style="text-align:right;">@context.Rate.ToString("N2")</MudTd>
+                        <MudTd Style="text-align:right;">@(_originalQty.GetValueOrDefault(context.OriginalInvoiceItemId ?? 0, context.Qty).ToString("N3"))</MudTd>
+                        <MudTd Style="text-align:right;">
+                            <MudNumericField T="decimal" Value="context.Qty"
+                                            ValueChanged="@(v => UpdateReturnQty(context, v))"
+                                            Variant="Variant.Outlined" Margin="Margin.Dense"
+                                            Min="0" Format="N3" Style="width:90px;"
+                                            HideSpinButtons="true" />
+                        </MudTd>
+                        <MudTd Style="text-align:right;">@context.DiscountPercent.ToString("N1")%</MudTd>
+                        <MudTd Style="text-align:right;">@context.Amount.ToString("N2")</MudTd>
+                        <MudTd Style="text-align:right;">@context.GstPercent.ToString("N1")%</MudTd>
+                        <MudTd Style="text-align:right; color:#B71C1C; font-weight:600;">@context.GstAmount.ToString("N2")</MudTd>
+                        <MudTd Style="text-align:right; color:#B71C1C; font-weight:700;">@((context.Amount + context.GstAmount).ToString("N2"))</MudTd>
+                    </RowTemplate>
+                    <FooterContent>
+                        <MudTd colspan="8" Style="text-align:right; font-weight:700; font-size:12px;">CREDIT TOTALS:</MudTd>
+                        <MudTd Style="text-align:right; font-weight:700; color:#B71C1C;">@_cnItems.Sum(x => x.Amount).ToString("N2")</MudTd>
+                        <MudTd></MudTd>
+                        <MudTd Style="text-align:right; font-weight:700; color:#B71C1C;">@_cnItems.Sum(x => x.GstAmount).ToString("N2")</MudTd>
+                        <MudTd Style="text-align:right; font-weight:700; font-size:13px; color:#B71C1C;">@_cnItems.Sum(x => x.Amount + x.GstAmount).ToString("N2")</MudTd>
+                    </FooterContent>
+                </MudTable>
+            </div>
+
+            <!-- Amount Summary -->
+            <div class="d-flex justify-end">
+                <div style="border: 1px solid #FFCDD2; border-radius: 4px; min-width: 280px;">
+                    <div style="background:#FFEBEE; padding:4px 10px; font-size:11px; font-weight:600; color:#B71C1C; border-bottom:1px solid #FFCDD2;">CREDIT NOTE SUMMARY</div>
+                    <div style="padding: 6px 12px;">
+                        <div class="d-flex justify-space-between" style="padding:3px 0; border-bottom:1px solid #f5f5f5;">
+                            <span style="font-size:11px; color:#777;">Taxable Amount</span>
+                            <span style="font-size:11px; font-weight:600;">@_cnItems.Sum(x => x.Amount).ToString("N2")</span>
+                        </div>
+                        <div class="d-flex justify-space-between" style="padding:3px 0; border-bottom:1px solid #f5f5f5;">
+                            <span style="font-size:11px; color:#777;">Total GST Reversal</span>
+                            <span style="font-size:11px; font-weight:600; color:#B71C1C;">@_cnItems.Sum(x => x.GstAmount).ToString("N2")</span>
+                        </div>
+                        <div class="d-flex justify-space-between" style="padding:5px 0; background:#B71C1C; border-radius:0 0 4px 4px; margin: 4px -12px -6px; padding-left:12px; padding-right:12px;">
+                            <span style="font-size:12px; font-weight:700; color:white;">CREDIT TOTAL</span>
+                            <span style="font-size:14px; font-weight:700; color:#FFCDD2;">@_cnItems.Sum(x => x.Amount + x.GstAmount).ToString("N2")</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- FOOTER -->
+        <div style="flex: 0 0 auto; border-top: 2px solid #B71C1C; background:#fff5f5; padding: 6px 16px;">
+            <div class="d-flex justify-space-between align-center">
+                <div>
+                    <span style="font-size:10px; color:#777;">CREDIT TOTAL: </span>
+                    <span style="font-size:16px; font-weight:700; color:#B71C1C;">@_cnItems.Sum(x => x.Amount + x.GstAmount).ToString("N2")</span>
+                    <span style="font-size:10px; color:#777; margin-left:10px;">Items with Qty > 0: @_cnItems.Count(x => x.Qty > 0)</span>
+                </div>
+                <div class="d-flex" style="gap:8px;">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="GoBack"
+                               StartIcon="@Icons.Material.Filled.ArrowBack" Size="Size.Small">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Style="background:#B71C1C; color:white; font-weight:700; min-width:180px;"
+                               OnClick="SaveCreditNote" Disabled="_saving"
+                               StartIcon="@Icons.Material.Filled.CheckCircle" Size="Size.Small">
+                        @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> <span>Saving...</span> }
+                        else { <span>🧾 SAVE CREDIT NOTE</span> }
+                    </MudButton>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int InvoiceId { get; set; }
+
+    private InvoiceEntity? _originalInvoice;
+    private List<CreditNoteItemEntity> _cnItems = new();
+    private Dictionary<int, decimal> _originalQty = new(); // itemId → original qty
+    private string _cnNumber = "";
+    private DateTime? _cnDate = DateTime.Today;
+    private string _cnReason = "GoodsReturn";
+    private string _cnNotes = "";
+    private bool _loading = true;
+    private bool _saving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _originalInvoice = await GstSalesService.GetInvoiceByIdAsync(InvoiceId);
+            _cnNumber = await CreditNoteService.GetNextCreditNoteNumber();
+
+            if (_originalInvoice != null)
+            {
+                // Pre-fill return items from original invoice lines
+                foreach (var line in _originalInvoice.GstSalesInvoiceItems)
+                {
+                    _originalQty[line.Id] = line.Qty;
+
+                    _cnItems.Add(new CreditNoteItemEntity
+                    {
+                        OriginalInvoiceItemId = line.Id,
+                        ItemId       = line.ItemId,
+                        Item         = line.Item,
+                        UnitId       = line.UnitId,
+                        Unit         = line.Unit,
+                        HSNCode      = line.HSNCode,
+                        Qty          = line.Qty,   // default: full return
+                        Rate         = line.Rate,
+                        DiscountPercent = line.DiscountPercent,
+                        GstPercent   = line.GstPercent,
+                        Amount       = line.Amount,
+                        GstAmount    = line.GstAmount
+                    });
+                }
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void UpdateReturnQty(CreditNoteItemEntity item, decimal newQty)
+    {
+        item.Qty = newQty;
+        // Recalculate based on rate and discount
+        decimal gross       = item.Rate * newQty;
+        item.Amount         = Math.Round(gross - Math.Round(gross * item.DiscountPercent / 100m, 2), 2);
+        item.GstAmount      = Math.Round(item.Amount * item.GstPercent / 100m, 2);
+        StateHasChanged();
+    }
+
+    private async Task SaveCreditNote()
+    {
+        var validItems = _cnItems.Where(x => x.Qty > 0).ToList();
+
+        if (!validItems.Any())
+        {
+            Snackbar.Add("Please enter a return quantity for at least one item.", Severity.Warning);
+            return;
+        }
+
+        if (_originalInvoice == null) return;
+
+        bool? confirm = await DialogService.ShowMessageBox(
+            "🧾 Save Credit Note",
+            $"Save Credit Note against Invoice {_originalInvoice.InvoiceNo}?\n" +
+            $"Items: {validItems.Count}  |  Credit Total: {validItems.Sum(x => x.Amount + x.GstAmount):N2}",
+            yesText: "Yes, Save",
+            cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        _saving = true;
+        try
+        {
+            var note = new CreditNoteEntity
+            {
+                Date             = _cnDate ?? DateTime.Today,
+                OriginalInvoiceId = InvoiceId,
+                CustomerId       = _originalInvoice.CustomerId,
+                Reason           = _cnReason,
+                Notes            = _cnNotes,
+                SubTotal         = validItems.Sum(x => x.Amount),
+                TotalGstAmount   = validItems.Sum(x => x.GstAmount),
+                TotalAmount      = validItems.Sum(x => x.Amount + x.GstAmount),
+                CreatedBy        = "User",
+                Items            = validItems
+            };
+
+            var saved = await CreditNoteService.CreateCreditNoteAsync(note);
+
+            Snackbar.Add($"✅ Credit Note {saved.CreditNoteNo} saved successfully!", Severity.Success);
+            NavigationManager.NavigateTo("/gst-sales-invoice");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving credit note: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void GoBack() => NavigationManager.NavigateTo("/gst-sales-invoice");
+}

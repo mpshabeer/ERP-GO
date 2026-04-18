@@ -1,0 +1,1220 @@
+@page "/gst-sales-invoice"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Dialogs
+@using InvoiceEntity = ERPGODomain.Entities.GstSalesInvoice
+@using InvoiceItemEntity = ERPGODomain.Entities.GstSalesInvoiceItem
+@inject IGstSalesInvoiceService GstSalesService
+@inject IGstCreditNoteService CreditNoteService
+@inject ICustomerService CustomerService
+@inject IItemService ItemService
+@inject IUnitService UnitService
+@inject IInvoicePdfService InvoicePdfService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+
+<style>
+    .gst-item-table table {
+        table-layout: fixed !important;
+        width: 100% !important;
+    }
+    .gst-item-table table th:first-child,
+    .gst-item-table table td:first-child {
+        width: 36px !important;
+        min-width: 36px !important;
+        max-width: 36px !important;
+        padding: 4px 2px !important;
+        text-align: center !important;
+        overflow: hidden !important;
+    }
+</style>
+
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;">
+
+    <MudTabs Elevation="1" Rounded="false" ApplyEffectsToContainer="true" PanelClass="px-2 py-1"
+             ActivePanelIndex="@_activeTabIndex" ActivePanelIndexChanged="OnTabChanged" KeepPanelsAlive="true">
+
+        <!-- TAB 1: NEW / EDIT INVOICE -->
+        <MudTabPanel Text="@(invoice.Id == 0 ? "New GST Invoice" : $"Edit GST Invoice #{invoice.InvoiceNo}")" Icon="@Icons.Material.Filled.Receipt">
+            <div style="height: calc(100vh - 135px); display: flex; flex-direction: column; overflow: hidden;">
+                <!-- Scrollable Form Area -->
+                <div style="flex: 1; overflow-y: auto; min-height: 0;" class="px-1 py-1">
+                    <MudForm @ref="form" @bind-IsValid="@success">
+
+                        <!-- HEADER PANEL -->
+                        <div style="border: 1px solid #d0d0d0; border-radius: 4px; margin-bottom: 4px; background: #fff;">
+                            <div style="background: @(invoice.Status == InvoiceStatus.Posted ? "#1B5E20" : "#1565C0"); color: white; padding: 3px 10px; display: flex; justify-content: space-between; align-items: center;">
+                                <div class="d-flex align-center" style="gap:8px;">
+                                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.03em;">@(invoice.Id == 0 ? "NEW GST INVOICE" : $"EDIT GST INVOICE — {invoice.InvoiceNo}")</span>
+                                    @if (invoice.Status == InvoiceStatus.Posted)
+                                    {
+                                        <span style="font-size:10px; background:#A5D6A7; color:#1B5E20; border-radius:10px; padding:1px 8px; font-weight:700;">🔒 POSTED</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="font-size:10px; background:#FFF9C4; color:#F57F17; border-radius:10px; padding:1px 8px; font-weight:700;">✏️ DRAFT</span>
+                                    }
+                                </div>
+                                <MudButton Variant="Variant.Text" Style="color:white; min-width:0; padding: 0 6px; font-size:11px;" StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearInvoice" Size="Size.Small" Disabled="@(invoice.Status == InvoiceStatus.Posted)">Clear/New</MudButton>
+                            </div>
+                            <div style="padding: 4px 8px;">
+                                <MudGrid Spacing="1">
+                                    <MudItem xs="6" md="2">
+                                        <MudTextField @bind-Value="invoice.InvoiceNo" Label="Invoice No." Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="true" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudDatePicker Label="Date" @bind-Date="invoiceDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    @if (invoice.PaymentTerms != "Cash")
+                                    {
+                                        <MudItem xs="6" md="2">
+                                            <MudDatePicker Label="Due Date" @bind-Date="invoice.DueDate" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                        </MudItem>
+                                    }
+                                    <MudItem xs="6" md="2">
+                                        <MudSelect T="string" Label="Payment Terms" @bind-Value="invoice.PaymentTerms" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            <MudSelectItem Value="@("Cash")">Cash</MudSelectItem>
+                                            <MudSelectItem Value="@("Credit")">Credit</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        <MudSelect T="string" Label="Supply Type" @bind-Value="invoice.SupplyType" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                                                   SelectedValuesChanged="StateHasChanged">
+                                            <MudSelectItem Value="@("Intra-State")">Intra-State (CGST/SGST)</MudSelectItem>
+                                            <MudSelectItem Value="@("Inter-State")">Inter-State (IGST)</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudAutocomplete T="Customer" Label="Customer *" @bind-Value="invoice.Customer" SearchFunc="@SearchCustomers"
+                                                         ToStringFunc="@(c => c == null ? null : c.Name)"
+                                                         Required="true" RequiredError="Customer is required."
+                                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         AdornmentIcon="@Icons.Material.Filled.Search"
+                                                         AnchorOrigin="Origin.BottomCenter" Dense="true"
+                                                         Clearable="true" ResetValueOnEmptyText="true">
+                                            <ItemTemplate Context="e">
+                                                <div class="d-flex flex-column pa-1">
+                                                    <MudText Typo="Typo.body2"><b>@e.Name</b></MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@e.Code &bull; @e.Mobile</MudText>
+                                                </div>
+                                            </ItemTemplate>
+                                        </MudAutocomplete>
+                                    </MudItem>
+                                </MudGrid>
+                            </div>
+                        </div>
+
+                        <!-- ENTRY ROW -->
+                        <div style="border: 1px solid #d0d0d0; border-radius: 4px; margin-bottom: 4px; background: #fff;">
+                            <div style="background: #37474F; color: white; padding: 2px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;">ITEM ENTRY</div>
+                            <div style="padding: 4px 8px;">
+                                <MudGrid Spacing="1" Class="align-center">
+                                    <MudItem xs="12" md="3">
+                                        <MudTextField @ref="_itemSearchField" Value="@tempItemName" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                                                      OnAdornmentClick="OpenItemSearch" Placeholder="Click 🔍 to search..."
+                                                      OnKeyDown="OnItemSearchKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudTextField @bind-Value="tempHsnCode" Label="HSN" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudSelect T="int?" Label="Unit" Value="@selectedUnitValue" ValueChanged="@OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                                            @foreach (var u in tempUnits)
+                                            {
+                                                <MudSelectItem Value="@((int?)u.Value)">@u.DisplayName</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @ref="_qtyField" @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" TextChanged="CalculateAmount" OnKeyDown="OnQtyKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @ref="_rateField" @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Format="N2" TextChanged="CalculateAmount" OnKeyDown="OnRateKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @ref="_discField" @bind-Value="tempDiscPercent" Label="Disc%" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Max="100" TextChanged="@(() => OnDiscPercentChanged(tempDiscPercent))" OnKeyDown="OnDiscKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @ref="_gstField" @bind-Value="tempGstPercent" Label="GST%" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Max="100" TextChanged="CalculateAmount" OnKeyDown="OnGstKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudTextField Value="@tempAmount.ToString("N2")" Label="Net Amt" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                      Style="background:#f1f8e9;" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="2">
+                                        @if (_editingItem == null)
+                                        {
+                                            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="AddLine" FullWidth="true" Size="Size.Small"
+                                                       Disabled="@(tempItem == null || tempQty <= 0)"
+                                                       StartIcon="@Icons.Material.Filled.Add">Add Line</MudButton>
+                                        }
+                                        else
+                                        {
+                                            <div class="d-flex gap-1">
+                                                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="UpdateLine" FullWidth="true" Size="Size.Small"
+                                                           Disabled="@(tempItem == null || tempQty <= 0)"
+                                                           StartIcon="@Icons.Material.Filled.Save">Update</MudButton>
+                                                <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="CancelEdit" Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.Cancel">Cancel</MudButton>
+                                            </div>
+                                        }
+                                    </MudItem>
+                                </MudGrid>
+                                @if (tempItem != null)
+                                {
+                                    <div style="font-size: 11px; padding: 2px 0; color: @(tempItem.CurrentStock > 0 ? "#2E7D32" : "#F57C00");">
+                                        Stock: <b>@tempItem.CurrentStock</b> base units &nbsp;|&nbsp; GST: <b>@tempItem.GstPercent%</b>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- ITEM GRID -->
+                        @if (_editingItem != null)
+                        {
+                            <div style="background:#fff8e1; border-left: 3px solid #FFA000; padding: 3px 10px; font-size: 12px; margin-bottom: 3px;">
+                                ✏️ Editing: <b>@_editingItem.Item?.Name</b> — update fields above then click <b>Update</b>
+                            </div>
+                        }
+                        <div style="border: 1px solid #d0d0d0; border-radius: 4px; margin-bottom: 4px; background: #fff;">
+                            <div style="background: #37474F; color: white; padding: 2px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;">ITEM LINES</div>
+                        <MudTable Items="@invoice.GstSalesInvoiceItems" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="0" Class="mb-0 gst-item-table">
+                            <HeaderContent>
+                                <MudTh Style="width: 36px; min-width: 36px; max-width: 36px; text-align: center; padding: 4px 2px; overflow: hidden;">#</MudTh>
+                                <MudTh Style="min-width: 160px;">Item</MudTh>
+                                <MudTh Style="width: 80px; min-width: 80px; text-align: center;">HSN</MudTh>
+                                <MudTh Style="width: 70px; min-width: 70px; text-align: center;">Unit</MudTh>
+                                <MudTh Style="width: 70px; min-width: 70px; text-align: right; white-space: nowrap;">Qty</MudTh>
+                                <MudTh Style="width: 90px; min-width: 90px; text-align: right; white-space: nowrap;">Rate</MudTh>
+                                <MudTh Style="width: 65px; min-width: 65px; text-align: right; white-space: nowrap;">Disc%</MudTh>
+                                <MudTh Style="width: 90px; min-width: 90px; text-align: right; white-space: nowrap;">Taxable</MudTh>
+                                @if (invoice.SupplyType == "Intra-State")
+                                {
+                                    <MudTh Style="width: 60px; min-width: 60px; text-align: right; color: #2E7D32; white-space: nowrap;">CGST%</MudTh>
+                                    <MudTh Style="width: 80px; min-width: 80px; text-align: right; color: #2E7D32; white-space: nowrap;">CGST Amt</MudTh>
+                                    <MudTh Style="width: 60px; min-width: 60px; text-align: right; color: #2E7D32; white-space: nowrap;">SGST%</MudTh>
+                                    <MudTh Style="width: 80px; min-width: 80px; text-align: right; color: #2E7D32; white-space: nowrap;">SGST Amt</MudTh>
+                                }
+                                else
+                                {
+                                    <MudTh Style="width: 60px; min-width: 60px; text-align: right; color: #2E7D32; white-space: nowrap;">IGST%</MudTh>
+                                    <MudTh Style="width: 80px; min-width: 80px; text-align: right; color: #2E7D32; white-space: nowrap;">IGST Amt</MudTh>
+                                }
+                                <MudTh Style="width: 90px; min-width: 90px; text-align: right; font-weight: bold; white-space: nowrap;">Total</MudTh>
+                                <MudTh Style="width: 80px; min-width: 80px; text-align: center;">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                @{
+                                    bool isEditing = _editingItem == context;
+                                    string rowBg = isEditing ? "background-color: #fff9e6; font-weight: bold;" : "";
+                                    var itemsList = invoice.GstSalesInvoiceItems.ToList();
+                                    int rowIndex = itemsList.IndexOf(context) + 1;
+                                    decimal rowTotal = context.Amount + context.GstAmount;
+                                }
+                                <MudTd Style="@($"width: 36px; min-width: 36px; max-width: 36px; text-align: center; padding: 4px 2px; overflow: hidden; {rowBg}")">@rowIndex</MudTd>
+                                <MudTd DataLabel="Item" Style="@rowBg">
+                                    <div class="d-flex align-center gap-1">
+                                        @if (isEditing)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                                        }
+                                        <div>
+                                            <MudText Typo="Typo.body2"><b>@context.Item?.Name</b></MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Item?.ItemCode</MudText>
+                                        </div>
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="HSN" Style="@($"text-align: center; {rowBg}")">@context.HSNCode</MudTd>
+                                <MudTd DataLabel="Unit" Style="@($"text-align: center; {rowBg}")">@((context.ItemUnit?.Unit != null) ? context.ItemUnit.Unit.Name : context.Unit?.Name)</MudTd>
+                                <MudTd DataLabel="Qty" Style="@($"text-align:right; {rowBg}")">@context.Qty.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Rate" Style="@($"text-align:right; {rowBg}")">@context.Rate.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Disc %" Style="@($"text-align:right; {rowBg}")">@context.DiscountPercent.ToString("0.##")%</MudTd>
+                                <MudTd DataLabel="Taxable" Style="@($"text-align:right; {rowBg}")">@context.Amount.ToString("N2")</MudTd>
+                                @if (invoice.SupplyType == "Intra-State")
+                                {
+                                    <MudTd DataLabel="CGST %" Style="@($"text-align:right; color: #2E7D32; {rowBg}")"><b>@((context.GstPercent / 2).ToString("0.##"))%</b></MudTd>
+                                    <MudTd DataLabel="CGST Amt" Style="@($"text-align:right; color: #2E7D32; {rowBg}")">@((context.GstAmount / 2).ToString("N2"))</MudTd>
+                                    <MudTd DataLabel="SGST %" Style="@($"text-align:right; color: #2E7D32; {rowBg}")"><b>@((context.GstPercent / 2).ToString("0.##"))%</b></MudTd>
+                                    <MudTd DataLabel="SGST Amt" Style="@($"text-align:right; color: #2E7D32; {rowBg}")">@((context.GstAmount / 2).ToString("N2"))</MudTd>
+                                }
+                                else
+                                {
+                                    <MudTd DataLabel="IGST %" Style="@($"text-align:right; color: #2E7D32; {rowBg}")"><b>@context.GstPercent.ToString("0.##")%</b></MudTd>
+                                    <MudTd DataLabel="IGST Amt" Style="@($"text-align:right; color: #2E7D32; {rowBg}")">@context.GstAmount.ToString("N2")</MudTd>
+                                }
+                                <MudTd DataLabel="Total" Style="@($"text-align:right; font-weight:bold; {rowBg}")">@rowTotal.ToString("N2")</MudTd>
+                                <MudTd Style="@($"text-align:center; {rowBg}")">
+                                    <MudTooltip Text="Edit this row">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                                       OnClick="@(() => EditLine(context))"
+                                                       Disabled="@(_editingItem != null && _editingItem != context)" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Delete this row">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                       OnClick="@(() => RemoveLine(context))"
+                                                       Disabled="@(_editingItem == context)" />
+                                    </MudTooltip>
+                                </MudTd>
+                            </RowTemplate>
+                            <FooterContent>
+                                <MudTfootRow Class="total-row">
+                                    <MudTd colspan="7" Style="text-align:right; font-weight:bold;">Subtotal:</MudTd>
+                                    <MudTd Style="text-align:right; font-weight:bold;">@invoice.GstSalesInvoiceItems.Sum(x => x.Amount).ToString("N2")</MudTd>
+                                    @if (invoice.SupplyType == "Intra-State")
+                                    {
+                                        <MudTd></MudTd>
+                                        <MudTd Style="text-align:right; color: #2E7D32;">@((invoice.GstSalesInvoiceItems.Sum(x => x.GstAmount) / 2).ToString("N2"))</MudTd>
+                                        <MudTd></MudTd>
+                                        <MudTd Style="text-align:right; color: #2E7D32;">@((invoice.GstSalesInvoiceItems.Sum(x => x.GstAmount) / 2).ToString("N2"))</MudTd>
+                                    }
+                                    else
+                                    {
+                                        <MudTd></MudTd>
+                                        <MudTd Style="text-align:right; color: #2E7D32;">@invoice.GstSalesInvoiceItems.Sum(x => x.GstAmount).ToString("N2")</MudTd>
+                                    }
+                                    <MudTd Style="text-align:right; font-weight:bold;">@invoice.GstSalesInvoiceItems.Sum(x => x.Amount + x.GstAmount).ToString("N2")</MudTd>
+                                    <MudTd></MudTd>
+                                </MudTfootRow>
+                            </FooterContent>
+                        </MudTable>
+                        </div>
+
+                        <!-- TOTALS + NOTES -->
+                        <div style="border: 1px solid #d0d0d0; border-radius: 4px; margin-bottom: 4px; background: #fff;">
+                            <div style="background: #37474F; color: white; padding: 2px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;">NOTES &amp; TOTALS</div>
+                            <div style="padding: 4px 8px;">
+                                <MudGrid Spacing="1">
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField @bind-Value="invoice.Notes" Label="Notes / Remarks" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="6">
+                                        <div style="border: 1px solid #e0e0e0; border-radius: 3px; overflow: hidden; font-size: 13px;">
+                                            <div style="display:flex; justify-content:space-between; padding: 4px 10px; background:#f5f5f5; border-bottom:1px solid #e0e0e0;">
+                                                <span style="color:#555;">Subtotal</span>
+                                                <b>@invoice.SubTotal.ToString("N2")</b>
+                                            </div>
+                                            <div style="display:flex; justify-content:space-between; align-items:center; padding: 4px 10px; background:#fff8f8; border-bottom:1px solid #e0e0e0;">
+                                                <div style="display:flex; align-items:center; gap:6px;">
+                                                    <span style="color:#555;">Discount</span>
+                                                    <MudNumericField @bind-Value="invoice.DiscountPercent"
+                                                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                     HideSpinButtons="true" Min="0" Max="100"
+                                                                     Adornment="Adornment.End" AdornmentText="%"
+                                                                     Style="width: 90px;"
+                                                                     TextChanged="RecalculateTotals" />
+                                                </div>
+                                                <span style="color:#c62828; font-weight:600;">- @invoice.DiscountAmount.ToString("N2")</span>
+                                            </div>
+                                            <div style="display:flex; justify-content:space-between; padding: 4px 10px; background:#f1f8e9; border-bottom:1px solid #e0e0e0;">
+                                                <span style="color:#2E7D32; font-weight:600;">Total GST</span>
+                                                <span style="color:#2E7D32; font-weight:600;">+ @invoice.TotalGstAmount.ToString("N2")</span>
+                                            </div>
+                                            <div style="display:flex; justify-content:space-between; padding: 5px 10px; background:#1B5E20;">
+                                                <span style="color:white; font-weight:700; font-size:13px; letter-spacing:0.04em;">GRAND TOTAL</span>
+                                                <span style="color:white; font-weight:700; font-size:15px;">@invoice.TotalAmount.ToString("N2")</span>
+                                            </div>
+                                        </div>
+                                    </MudItem>
+                                </MudGrid>
+                            </div>
+                        </div>
+
+                    </MudForm>
+                </div>
+
+                <!-- FIXED FOOTER -->
+                <div style="flex: 0 0 auto; border-top: 2px solid #1B5E20; background: #f9f9f9; padding: 4px 12px;">
+                    <div class="d-flex justify-space-between align-center">
+                        <div class="d-flex align-center" style="gap: 10px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Receipt" Color="Color.Success" Size="Size.Small" />
+                            <div>
+                                <div style="font-size:10px; color:#777;">GRAND TOTAL</div>
+                                <div style="font-size:16px; font-weight:700; color:#1B5E20;">@invoice.TotalAmount.ToString("N2")</div>
+                            </div>
+                            @if (invoice.GstSalesInvoiceItems.Count > 0)
+                            {
+                                <span style="font-size:11px; background:#e8f5e9; color:#2E7D32; border-radius:10px; padding:2px 8px;">@invoice.GstSalesInvoiceItems.Count item(s)</span>
+                                <span style="font-size:11px; background:#e8f5e9; color:#2E7D32; border-radius:10px; padding:2px 8px;">GST: @invoice.TotalGstAmount.ToString("N2")</span>
+                            }
+                        </div>
+                        <div class="d-flex" style="gap:6px;">
+                            <!-- New / Clear — always visible -->
+                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearInvoice"
+                                       StartIcon="@Icons.Material.Filled.AddCircleOutline" Size="Size.Small"
+                                       Disabled="@(invoice.Status == InvoiceStatus.Posted)">New / Clear</MudButton>
+
+                            @if (invoice.Status == InvoiceStatus.Posted)
+                            {
+                                <!-- Posted: only Raise Credit Note -->
+                                <MudButton Variant="Variant.Filled" Style="background:#B71C1C; color:white; font-weight:700;" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.ReceiptLong"
+                                           OnClick="RaiseCreditNote">🧾 Raise Credit Note</MudButton>
+                            }
+                            else
+                            {
+                                <!-- Draft: Save Draft (keep editable) -->
+                                <MudButton Variant="Variant.Outlined" Style="border-color:#1565C0; color:#1565C0; font-weight:600; min-width:130px;"
+                                           OnClick="SaveInvoice" Disabled="_isProcessing"
+                                           StartIcon="@Icons.Material.Filled.Save" Size="Size.Small">
+                                    @if (_isProcessing) { <span>Saving...</span> }
+                                    else { <span>@(invoice.Id == 0 ? "SAVE DRAFT" : "UPDATE DRAFT")</span> }
+                                </MudButton>
+
+                                <!-- Draft: Save & Post (lock immediately) -->
+                                <MudButton Variant="Variant.Filled" Style="background:#1B5E20; color:white; font-weight:700; min-width:160px;"
+                                           OnClick="SaveAndPost" Disabled="_isProcessing"
+                                           StartIcon="@Icons.Material.Filled.CheckCircle" Size="Size.Small">
+                                    @if (_isProcessing)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        <span>Processing...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@(invoice.Id == 0 ? "💾 SAVE & POST" : "💾 UPDATE & POST")</span>
+                                    }
+                                </MudButton>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </MudTabPanel>
+
+        <!-- TAB 2: INVOICE HISTORY -->
+        <MudTabPanel Text="GST Invoice History" Icon="@Icons.Material.Filled.History">
+            <div style="height: calc(100vh - 140px); display: flex; flex-direction: column; overflow: hidden;">
+                <div style="flex: 0 0 auto;" class="px-4 pb-2 d-flex justify-end">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="LoadList" Size="Size.Small">Refresh</MudButton>
+                </div>
+                <div style="flex: 1; overflow-y: auto; min-height: 0;" class="px-1">
+                    @if (_listLoading)
+                    {
+                        <div class="d-flex justify-center align-center" style="height: 200px;">
+                            <MudProgressCircular Indeterminate="true" Color="Color.Success" />
+                        </div>
+                    }
+                    else if (_invoiceList?.Count == 0)
+                    {
+                        <MudPaper Elevation="0" Class="d-flex flex-column align-center justify-center pa-8" Style="min-height: 200px; border: 2px dashed #e0e0e0;">
+                            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Tertiary" />
+                            <MudText Typo="Typo.body1" Class="mt-2" Color="Color.Tertiary">No GST invoices found</MudText>
+                        </MudPaper>
+                    }
+                    else if (_invoiceList != null)
+                    {
+                        <MudTable Items="@_invoiceList" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="2" FixedHeader="true" Height="100%">
+                            <HeaderContent>
+                                <MudTh>#</MudTh>
+                                <MudTh>Invoice No.</MudTh>
+                                <MudTh>Date</MudTh>
+                                <MudTh>Customer</MudTh>
+                                <MudTh Style="text-align:right; color: #2E7D32;">Total GST</MudTh>
+                                <MudTh Style="text-align:right;">Grand Total</MudTh>
+                                <MudTh Style="width: 120px; text-align:center;">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                @{int rowNum = _invoiceList.IndexOf(context) + 1;}
+                                <MudTd>@rowNum</MudTd>
+                                <MudTd>
+                                    <MudLink Style="font-weight: bold; cursor: pointer; color: #2E7D32;" OnClick="@(() => LoadInvoiceForEdit(context))">
+                                        @context.InvoiceNo
+                                    </MudLink>
+                                </MudTd>
+                                <MudTd>@context.Date.ToString("dd-MMM-yyyy")</MudTd>
+                                <MudTd>@context.Customer?.Name</MudTd>
+                                <MudTd Style="text-align:right; color: #2E7D32; font-weight: bold;">@context.TotalGstAmount.ToString("N2")</MudTd>
+                                <MudTd Style="text-align:right; font-weight: bold; color: #1976d2;">@context.TotalAmount.ToString("N2")</MudTd>
+                                <MudTd Style="text-align:center;">
+                                    @if (context.Status == InvoiceStatus.Posted)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Style="background:#1B5E20; color:white; font-size:10px; height:20px;">🔒 POSTED</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudTooltip Text="Edit Invoice">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small"
+                                                           OnClick="@(() => LoadInvoiceForEdit(context))" />
+                                        </MudTooltip>
+                                    }
+                                    <MudTooltip Text="Preview PDF">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Preview" Color="Color.Info" Size="Size.Small"
+                                                       OnClick="@(async () => await PreviewInvoicePdf(context))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Download PDF">
+                                        <MudIconButton Icon="@Icons.Material.Filled.PictureAsPdf" Color="Color.Error" Size="Size.Small"
+                                                       OnClick="@(async () => await DownloadInvoicePdf(context))" />
+                                    </MudTooltip>
+                                    @if (context.Status != InvoiceStatus.Posted)
+                                    {
+                                        <MudTooltip Text="Delete Invoice">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                                           OnClick="@(async () => await DeleteInvoice(context))" />
+                                        </MudTooltip>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </div>
+            </div>
+        </MudTabPanel>
+    </MudTabs>
+</div>
+
+@code {
+    private int _activeTabIndex = 0;
+
+    // ────────── NEW / EDIT INVOICE STATE ──────────
+    private InvoiceEntity invoice = new InvoiceEntity();
+    private DateTime? invoiceDate = DateTime.Now;
+    private bool success;
+    private MudForm form;
+    private bool _isProcessing = false;
+    private InvoiceItemEntity? _editingItem = null;
+
+    // Cache
+    private List<Customer> customers = new List<Customer>();
+    private List<Unit> allUnits = new List<Unit>();
+
+    // Entry Row Variables
+    private Item? tempItem;
+    private string tempItemName = "";
+    private string? tempHsnCode = "";
+    private int? selectedUnitValue;
+    private List<UnitDisplay> tempUnits = new List<UnitDisplay>();
+    private decimal tempQty = 0;
+    private decimal tempQtyPerBase = 1;
+    private decimal tempRate = 0;
+    private decimal tempDiscPercent = 0;
+    private decimal tempDiscAmount = 0;
+    private decimal tempAmount = 0;
+    private decimal tempGstPercent = 0; // NEW: item-wise GST
+
+    private MudTextField<string> _itemSearchField;
+    private MudNumericField<decimal> _qtyField;
+    private MudNumericField<decimal> _rateField;
+    private MudNumericField<decimal> _discField;
+    private MudNumericField<decimal> _gstField;
+    private MudButton _addButton;
+
+    public class UnitDisplay
+    {
+        public int Value { get; set; }
+        public int UnitId { get; set; }
+        public string DisplayName { get; set; } = "";
+        public decimal Multiplier { get; set; }
+        public int? ItemUnitId { get; set; }
+        public decimal UnitRate { get; set; }
+    }
+
+    // ────────── LIST STATE ──────────
+    private List<InvoiceEntity>? _invoiceList;
+    private bool _listLoading = false;
+
+    // ────────── LIFECYCLE ──────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCacheData();
+        await InitializeNewInvoiceAsync();
+        await LoadList();
+    }
+
+    private void OnTabChanged(int index)
+    {
+        _activeTabIndex = index;
+    }
+
+    private async Task InitializeNewInvoiceAsync()
+    {
+        try
+        {
+            invoice = new InvoiceEntity();
+            invoice.InvoiceNo = await GstSalesService.GetNextInvoiceNumber();
+        }
+        catch
+        {
+            invoice.InvoiceNo = $"GINV-{DateTime.Now:yyyyMMddHHmmss}";
+        }
+
+        invoice.PaymentTerms = "Cash";
+        invoiceDate = DateTime.Now;
+        invoice.DueDate = DateTime.Now;
+
+        if (customers.Any())
+        {
+            var defaultCustomer = customers.FirstOrDefault(c => c.Code == "C1000")
+                               ?? customers.FirstOrDefault(c => c.Name.Contains("Cash", StringComparison.OrdinalIgnoreCase));
+            if (defaultCustomer != null)
+            {
+                invoice.Customer = defaultCustomer;
+                invoice.CustomerId = defaultCustomer.Id;
+            }
+        }
+
+        invoice.GstSalesInvoiceItems = new List<InvoiceItemEntity>();
+        CancelEdit();
+    }
+
+    private async Task LoadCacheData()
+    {
+        try
+        {
+            var t1 = CustomerService.GetAllCustomersAsync();
+            var t2 = UnitService.GetAllUnitsAsync();
+            await Task.WhenAll(t1, t2);
+            customers = t1.Result;
+            allUnits = t2.Result;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ────────── LIST METHODS ──────────
+
+    private async Task LoadList()
+    {
+        _listLoading = true;
+        try
+        {
+            _invoiceList = await GstSalesService.GetInvoicesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading list: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _listLoading = false;
+        }
+    }
+
+    // ────────── PDF PREVIEW & DOWNLOAD ──────────
+
+    private bool _isPdfLoading = false;
+
+    private async Task PreviewInvoicePdf(InvoiceEntity inv)
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await InvoicePdfService.GenerateGstSalesInvoicePdfAsync(inv.Id);
+            var parameters = new DialogParameters { ["PdfBytes"] = bytes };
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            DialogService.Show<Dialogs.PdfPreviewDialog>($"Preview GST Invoice - {inv.InvoiceNo}", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
+    private async Task DownloadInvoicePdf(InvoiceEntity inv)
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        Snackbar.Add($"Generating PDF for {inv.InvoiceNo}…", Severity.Info);
+        try
+        {
+            var bytes = await InvoicePdfService.GenerateGstSalesInvoicePdfAsync(inv.Id);
+            await JSRuntime.InvokeVoidAsync(
+                "downloadFileFromBytes",
+                $"GstInvoice_{inv.InvoiceNo}.pdf",
+                "application/pdf",
+                bytes);
+            Snackbar.Add("PDF downloaded!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating PDF: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
+    // ────────── DELETE ──────────
+
+    private async Task DeleteInvoice(InvoiceEntity inv)
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Confirm Delete",
+            $"Delete GST Invoice {inv.InvoiceNo}? This will reverse stock and remove journal entries.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        try
+        {
+            await GstSalesService.DeleteInvoiceAsync(inv.Id);
+            Snackbar.Add($"Invoice {inv.InvoiceNo} deleted.", Severity.Success);
+            await LoadList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ────────── LOAD FOR EDIT LOGIC ──────────
+
+    private async Task LoadInvoiceForEdit(InvoiceEntity selectedInvoice)
+    {
+        if (invoice.GstSalesInvoiceItems.Any())
+        {
+            bool? result = await DialogService.ShowMessageBox(
+                "Unsaved Changes",
+                "You have unsaved changes. Loading another invoice will discard them. Continue?",
+                yesText: "Discard & Load", cancelText: "Cancel");
+
+            if (result != true) return;
+        }
+
+        try
+        {
+            var newInv = new InvoiceEntity
+            {
+                Id = selectedInvoice.Id,
+                InvoiceNo = selectedInvoice.InvoiceNo,
+                Date = selectedInvoice.Date,
+                DueDate = selectedInvoice.DueDate,
+                PaymentTerms = selectedInvoice.PaymentTerms,
+                CustomerId = selectedInvoice.CustomerId,
+                Customer = customers.FirstOrDefault(c => c.Id == selectedInvoice.CustomerId),
+                Notes = selectedInvoice.Notes,
+                SubTotal = selectedInvoice.SubTotal,
+                DiscountPercent = selectedInvoice.DiscountPercent,
+                DiscountAmount = selectedInvoice.DiscountAmount,
+                TotalGstAmount = selectedInvoice.TotalGstAmount,
+                TotalAmount = selectedInvoice.TotalAmount,
+                GstSalesInvoiceItems = new List<InvoiceItemEntity>()
+            };
+
+            if (selectedInvoice.GstSalesInvoiceItems != null)
+            {
+                foreach (var item in selectedInvoice.GstSalesInvoiceItems)
+                {
+                    newInv.GstSalesInvoiceItems.Add(new InvoiceItemEntity
+                    {
+                        Id = item.Id,
+                        GstSalesInvoiceId = item.GstSalesInvoiceId,
+                        ItemId = item.ItemId,
+                        Item = item.Item,
+                        UnitId = item.UnitId,
+                        Unit = item.Unit,
+                        ItemUnitId = item.ItemUnitId,
+                        Qty = item.Qty,
+                        QtyPerBaseUnit = item.QtyPerBaseUnit,
+                        QtyInBaseUnit = item.QtyInBaseUnit,
+                        Rate = item.Rate,
+                        DiscountPercent = item.DiscountPercent,
+                        DiscountAmount = item.DiscountAmount,
+                        Amount = item.Amount,
+                        GstPercent = item.GstPercent,
+                        GstAmount = item.GstAmount
+                    });
+                }
+            }
+
+            invoice = newInv;
+            invoiceDate = invoice.Date;
+            _activeTabIndex = 0;
+            CancelEdit();
+            StateHasChanged();
+
+            Snackbar.Add($"GST Invoice {invoice.InvoiceNo} loaded for editing.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading invoice: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ────────── INVOICE ENTRY METHODS ──────────
+
+    private async Task<IEnumerable<Customer>> SearchCustomers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value)) return customers;
+        return customers.Where(x =>
+            x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase) ||
+            x.Code.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    private async Task OpenItemSearch()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = DialogService.Show<ItemSearchDialog>("Search Item", options);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is Item item)
+            await OnItemSelected(item);
+    }
+
+    private async Task OnItemSelected(Item item)
+    {
+        tempItem = item;
+        tempItemName = $"{item.ItemCode} - {item.Name}";
+        tempHsnCode = item.HSNCode;
+        tempQty = 1;
+        tempQtyPerBase = 1;
+        tempRate = item.Rate;
+        tempDiscPercent = 0;
+        tempDiscAmount = 0;
+        tempGstPercent = item.GstPercent; // Auto-populate from item
+
+        tempUnits.Clear();
+
+        if (item.BaseUnit != null)
+            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null, UnitRate = item.Rate });
+
+        if (item.ItemUnits != null)
+        {
+            foreach (var iu in item.ItemUnits)
+            {
+                var name = iu.Unit?.Name ?? "Unit";
+                decimal explicitRate = iu.Rate > 0 ? iu.Rate : (item.Rate * iu.QtyPerBaseUnit);
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id, UnitRate = explicitRate });
+            }
+        }
+
+        if (tempUnits.Any())
+        {
+            var baseUnit = tempUnits.FirstOrDefault(u => u.Value < 0);
+            selectedUnitValue = baseUnit?.Value ?? tempUnits.First().Value;
+            await OnUnitChanged(selectedUnitValue);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnUnitChanged(int? value)
+    {
+        selectedUnitValue = value;
+        if (tempItem == null || value == null) return;
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == value);
+        if (selectedUnit != null)
+        {
+            tempQtyPerBase = selectedUnit.Multiplier;
+            tempRate = selectedUnit.UnitRate;
+        }
+        CalculateAmount();
+    }
+
+    private void OnDiscPercentChanged(decimal percent)
+    {
+        var gross = tempQty * tempRate;
+        tempDiscAmount = gross * (percent / 100);
+        CalculateAmount();
+    }
+
+    private void CalculateAmount()
+    {
+        var gross = tempQty * tempRate;
+        tempDiscAmount = gross * (tempDiscPercent / 100);
+        tempAmount = gross - tempDiscAmount;
+        StateHasChanged();
+    }
+
+    private async Task OnItemSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            await OpenItemSearch();
+    }
+
+    private async Task OnQtyKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            if (_rateField != null) await _rateField.FocusAsync();
+    }
+
+    private async Task OnRateKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            if (_discField != null) await _discField.FocusAsync();
+    }
+
+    private async Task OnDiscKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            if (_gstField != null) await _gstField.FocusAsync();
+    }
+
+    private async Task OnGstKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+        {
+            if (_editingItem == null)
+                await AddLine();
+            else
+                await UpdateLine();
+        }
+    }
+
+    private async Task AddLine()
+    {
+        if (tempItem == null || tempQty <= 0) return;
+
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == selectedUnitValue);
+        decimal qtyInBase = tempQty * (selectedUnit?.Multiplier ?? 1);
+        decimal gstAmt = Math.Round(tempAmount * tempGstPercent / 100m, 2);
+
+        var line = new InvoiceItemEntity
+        {
+            ItemId = tempItem.Id,
+            Item = tempItem,
+            UnitId = selectedUnit?.UnitId ?? tempItem.UnitId,
+            Unit = allUnits.FirstOrDefault(u => u.Id == (selectedUnit?.UnitId ?? tempItem.UnitId)),
+            ItemUnitId = selectedUnit?.ItemUnitId,
+            HSNCode = tempHsnCode,
+            Qty = tempQty,
+            QtyPerBaseUnit = tempQtyPerBase,
+            QtyInBaseUnit = qtyInBase,
+            Rate = tempRate,
+            DiscountPercent = tempDiscPercent,
+            DiscountAmount = tempDiscAmount,
+            Amount = tempAmount,
+            GstPercent = tempGstPercent,
+            GstAmount = gstAmt
+        };
+
+        invoice.GstSalesInvoiceItems.Add(line);
+        RecalculateTotals();
+        await ResetEntryRow();
+    }
+
+    private async Task UpdateLine()
+    {
+        if (_editingItem == null || tempItem == null || tempQty <= 0) return;
+
+        var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == selectedUnitValue);
+        decimal qtyInBase = tempQty * (selectedUnit?.Multiplier ?? 1);
+        decimal gstAmt = Math.Round(tempAmount * tempGstPercent / 100m, 2);
+
+        _editingItem.ItemId = tempItem.Id;
+        _editingItem.Item = tempItem;
+        _editingItem.UnitId = selectedUnit?.UnitId ?? tempItem.UnitId;
+        _editingItem.Unit = allUnits.FirstOrDefault(u => u.Id == (selectedUnit?.UnitId ?? tempItem.UnitId));
+        _editingItem.ItemUnitId = selectedUnit?.ItemUnitId;
+        _editingItem.HSNCode = tempHsnCode;
+        _editingItem.Qty = tempQty;
+        _editingItem.QtyPerBaseUnit = tempQtyPerBase;
+        _editingItem.QtyInBaseUnit = qtyInBase;
+        _editingItem.Rate = tempRate;
+        _editingItem.DiscountPercent = tempDiscPercent;
+        _editingItem.DiscountAmount = tempDiscAmount;
+        _editingItem.Amount = tempAmount;
+        _editingItem.GstPercent = tempGstPercent;
+        _editingItem.GstAmount = gstAmt;
+
+        _editingItem = null;
+        RecalculateTotals();
+        await ResetEntryRow();
+    }
+
+    private void EditLine(InvoiceItemEntity item)
+    {
+        _editingItem = item;
+        tempItem = item.Item;
+        tempItemName = $"{item.Item?.ItemCode} - {item.Item?.Name}";
+        tempQty = item.Qty;
+        tempQtyPerBase = item.QtyPerBaseUnit;
+        tempRate = item.Rate;
+        tempDiscPercent = item.DiscountPercent;
+        tempDiscAmount = item.DiscountAmount;
+        tempAmount = item.Amount;
+        tempGstPercent = item.GstPercent;
+
+        // Rebuild units for this item
+        tempUnits.Clear();
+        if (item.Item?.BaseUnit != null)
+            tempUnits.Add(new UnitDisplay { Value = -item.Item.UnitId, UnitId = item.Item.UnitId, DisplayName = item.Item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null, UnitRate = item.Item.Rate });
+
+        if (item.Item?.ItemUnits != null)
+        {
+            foreach (var iu in item.Item.ItemUnits)
+            {
+                var name = iu.Unit?.Name ?? "Unit";
+                decimal explicitRate = iu.Rate > 0 ? iu.Rate : (item.Item.Rate * iu.QtyPerBaseUnit);
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id, UnitRate = explicitRate });
+            }
+        }
+
+        selectedUnitValue = item.ItemUnitId.HasValue
+            ? tempUnits.FirstOrDefault(u => u.ItemUnitId == item.ItemUnitId)?.Value
+            : tempUnits.FirstOrDefault(u => u.Value < 0)?.Value ?? tempUnits.FirstOrDefault()?.Value;
+    }
+
+    private async Task CancelEdit()
+    {
+        _editingItem = null;
+        await ResetEntryRow();
+    }
+
+    private void RemoveLine(InvoiceItemEntity item)
+    {
+        invoice.GstSalesInvoiceItems.Remove(item);
+        RecalculateTotals();
+    }
+
+    private async Task ResetEntryRow()
+    {
+        tempItem = null;
+        tempItemName = "";
+        tempQty = 0;
+        tempQtyPerBase = 1;
+        tempRate = 0;
+        tempDiscPercent = 0;
+        tempDiscAmount = 0;
+        tempAmount = 0;
+        tempGstPercent = 0;
+        selectedUnitValue = null;
+        tempUnits.Clear();
+
+        if (_itemSearchField != null)
+        {
+            await Task.Delay(50);
+            await _itemSearchField.FocusAsync();
+        }
+    }
+
+    private void RecalculateTotals()
+    {
+        invoice.SubTotal = invoice.GstSalesInvoiceItems.Sum(x => x.Amount);
+        invoice.DiscountAmount = Math.Round(invoice.SubTotal * invoice.DiscountPercent / 100m, 2);
+        invoice.TotalGstAmount = invoice.GstSalesInvoiceItems.Sum(x => x.GstAmount);
+        invoice.TotalAmount = invoice.SubTotal - invoice.DiscountAmount + invoice.TotalGstAmount;
+        StateHasChanged();
+    }
+
+    private async Task SaveInvoice()
+    {
+        if (invoice.GstSalesInvoiceItems.Count == 0)
+        {
+            Snackbar.Add("Please add at least one item.", Severity.Warning);
+            return;
+        }
+        if (invoice.Customer == null)
+        {
+            Snackbar.Add("Please select a customer.", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        InvoiceEntity? savedInvoice = null;
+
+        try
+        {
+            // Sync date from DatePicker
+            if (invoiceDate.HasValue)
+                invoice.Date = invoiceDate.Value;
+
+            invoice.CustomerId = invoice.Customer.Id;
+            invoice.Customer = null; // Avoid EF issues
+
+            // Recalculate before save
+            invoice.SubTotal = invoice.GstSalesInvoiceItems.Sum(x => x.Amount);
+            invoice.DiscountAmount = Math.Round(invoice.SubTotal * invoice.DiscountPercent / 100m, 2);
+            invoice.TotalGstAmount = invoice.GstSalesInvoiceItems.Sum(x => x.GstAmount);
+            invoice.TotalAmount = invoice.SubTotal - invoice.DiscountAmount + invoice.TotalGstAmount;
+
+            if (invoice.Id == 0)
+            {
+                savedInvoice = await GstSalesService.CreateInvoice(invoice);
+                Snackbar.Add($"✅ GST Invoice {savedInvoice.InvoiceNo} created successfully!", Severity.Success);
+            }
+            else
+            {
+                savedInvoice = await GstSalesService.UpdateInvoice(invoice);
+                Snackbar.Add($"✅ GST Invoice {savedInvoice.InvoiceNo} updated successfully!", Severity.Success);
+            }
+
+            await LoadList();
+            await InitializeNewInvoiceAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving invoice: {ex.Message}", Severity.Error);
+            savedInvoice = null;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+
+    private async Task ClearInvoice()
+    {
+        if (invoice.GstSalesInvoiceItems.Any())
+        {
+            bool? confirm = await DialogService.ShowMessageBox(
+                "Clear Invoice",
+                "Are you sure you want to clear the current invoice?",
+                yesText: "Yes, Clear", cancelText: "Cancel");
+
+            if (confirm != true) return;
+        }
+
+        await InitializeNewInvoiceAsync();
+    }
+
+    /// <summary>
+    /// ERP-standard single action: Save (or Update) the invoice and immediately Post it.
+    /// Once posted the invoice is locked — corrections via Credit Note only.
+    /// </summary>
+    private async Task SaveAndPost()
+    {
+        if (invoice.GstSalesInvoiceItems.Count == 0)
+        {
+            Snackbar.Add("Please add at least one item before saving.", Severity.Warning);
+            return;
+        }
+        if (invoice.Customer == null)
+        {
+            Snackbar.Add("Please select a customer.", Severity.Warning);
+            return;
+        }
+
+        // Single confirmation that covers both save + post
+        bool? confirm = await DialogService.ShowMessageBox(
+            "💾 Save & Post Invoice",
+            $"This will save and immediately POST the invoice.\n\n" +
+            "⚠️ Once posted, the invoice CANNOT be edited or deleted.\n" +
+            "Corrections must be done via a Credit Note.",
+            yesText: "Yes, Save & Post",
+            cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        _isProcessing = true;
+        InvoiceEntity? savedInvoice = null;
+
+        try
+        {
+            // Step 1 — Sync date + recalculate
+            if (invoiceDate.HasValue)
+                invoice.Date = invoiceDate.Value;
+
+            invoice.CustomerId = invoice.Customer.Id;
+            invoice.Customer   = null;
+
+            invoice.SubTotal        = invoice.GstSalesInvoiceItems.Sum(x => x.Amount);
+            invoice.DiscountAmount  = Math.Round(invoice.SubTotal * invoice.DiscountPercent / 100m, 2);
+            invoice.TotalGstAmount  = invoice.GstSalesInvoiceItems.Sum(x => x.GstAmount);
+            invoice.TotalAmount     = invoice.SubTotal - invoice.DiscountAmount + invoice.TotalGstAmount;
+
+            // Step 2 — Create or Update
+            if (invoice.Id == 0)
+                savedInvoice = await GstSalesService.CreateInvoice(invoice);
+            else
+                savedInvoice = await GstSalesService.UpdateInvoice(invoice);
+
+            // Step 3 — Immediately Post
+            var posted = await GstSalesService.PostInvoiceAsync(savedInvoice.Id, "User");
+            savedInvoice.Status   = posted.Status;
+            savedInvoice.PostedAt = posted.PostedAt;
+            savedInvoice.PostedBy = posted.PostedBy;
+
+            // Sync back to local invoice
+            invoice.Id       = savedInvoice.Id;
+            invoice.InvoiceNo = savedInvoice.InvoiceNo;
+            invoice.Status   = InvoiceStatus.Posted;
+            invoice.PostedAt = posted.PostedAt;
+
+            Snackbar.Add($"✅ Invoice {savedInvoice.InvoiceNo} saved and posted successfully!", Severity.Success);
+            await LoadList();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            savedInvoice = null;
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+
+        // Prompt to print
+        if (savedInvoice != null)
+        {
+            bool? printNow = await DialogService.ShowMessageBox(
+                "🖨️ Print Invoice",
+                $"Invoice {savedInvoice.InvoiceNo} posted successfully.\nWould you like to preview / print it now?",
+                yesText: "Yes, Preview PDF",
+                cancelText: "No, Skip");
+
+            if (printNow == true)
+                await PreviewInvoicePdf(savedInvoice);
+        }
+    }
+
+
+    private async Task PostInvoice()
+    {
+        if (invoice.Id == 0 || invoice.Status == InvoiceStatus.Posted) return;
+
+        bool? confirm = await DialogService.ShowMessageBox(
+            "🔒 Post Invoice",
+            $"Are you sure you want to POST Invoice {invoice.InvoiceNo}?\n\n" +
+            "⚠️ Once posted, this invoice CANNOT be edited or deleted.\n" +
+            "Corrections must be made via a Credit Note.",
+            yesText: "Yes, Post It",
+            cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        _isProcessing = true;
+        try
+        {
+            var posted = await GstSalesService.PostInvoiceAsync(invoice.Id, "User");
+            invoice.Status   = posted.Status;
+            invoice.PostedAt = posted.PostedAt;
+            invoice.PostedBy = posted.PostedBy;
+            Snackbar.Add($"✅ Invoice {invoice.InvoiceNo} has been POSTED successfully. It is now locked.", Severity.Success);
+            await LoadList();
+            StateHasChanged();
+
+            // Prompt to print
+            bool? printNow = await DialogService.ShowMessageBox(
+                "🖨️ Print Invoice",
+                "Would you like to preview / print the posted invoice now?",
+                yesText: "Yes, Preview PDF",
+                cancelText: "No, Skip");
+
+            if (printNow == true)
+                await PreviewInvoicePdf(invoice);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error posting invoice: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private void RaiseCreditNote()
+    {
+        if (invoice.Id > 0)
+            NavigationManager.NavigateTo($"/gst-credit-note/{invoice.Id}");
+    }
+}

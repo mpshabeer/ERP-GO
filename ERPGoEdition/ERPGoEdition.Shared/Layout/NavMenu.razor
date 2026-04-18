@@ -15,10 +15,28 @@
     
     <MudNavGroup Title="Transactions" Icon="@Icons.Material.Filled.Receipt" Expanded="true">
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ReceiptLong" OnClick="@(() => OpenTab("Sales Invoice", typeof(SalesInvoice)))">Sales Invoice</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ReceiptLong" Style="color: #2E7D32;" OnClick="@(() => OpenTab("GST Sales Invoice", typeof(GstSalesInvoice)))">GST Sales Invoice</MudNavLink>
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ShoppingCart" OnClick="@(() => OpenTab("Purchase Entry", typeof(PurchaseEntry)))">Purchase Entry</MudNavLink>
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inventory2" OnClick="@(() => OpenTab("Opening Stock", typeof(OpeningStockEntry)))">Opening Stock</MudNavLink>
         <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.EditNote" OnClick="@(() => OpenTab("Stock Adjustment", typeof(StockAdjustmentEntry)))">Stock Adjustment</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Payments" OnClick="@(() => OpenTab("Receipts", typeof(ERPGoEdition.Shared.Pages.Accounting.ReceiptsList)))">Receipts</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MoneyOff" OnClick="@(() => OpenTab("Payments", typeof(ERPGoEdition.Shared.Pages.Accounting.PaymentsList)))">Payments</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountBalanceWallet" OnClick="@(() => OpenTab("Expenses", typeof(ERPGoEdition.Shared.Pages.Accounting.ExpensesList)))">Expenses</MudNavLink>
     </MudNavGroup>
+    
+    <MudNavGroup Title="Reports" Icon="@Icons.Material.Filled.InsertChart" Expanded="true">
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inventory2" OnClick="@(() => OpenTab("Stock Report", typeof(ERPGoEdition.Shared.Pages.Reports.StockReport)))">Stock Report</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PointOfSale" OnClick="@(() => OpenTab("Sales Report", typeof(ERPGoEdition.Shared.Pages.Reports.SalesReport)))">Sales Report</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ShoppingCart" OnClick="@(() => OpenTab("Purchase Report", typeof(ERPGoEdition.Shared.Pages.Reports.PurchaseReport)))">Purchase Report</MudNavLink>
+    </MudNavGroup>
+    
+    <MudNavGroup Title="Accounting" Icon="@Icons.Material.Filled.AccountBalance" Expanded="true">
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree" OnClick="@(() => OpenTab("Account Master", typeof(ERPGoEdition.Shared.Pages.Accounting.AccountMaster)))">Account Master</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook" OnClick="@(() => OpenTab("Account Ledger", typeof(ERPGoEdition.Shared.Pages.Reports.AccountLedgerReport)))">Account Ledger</MudNavLink>
+        <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Balance" OnClick="@(() => OpenTab("Trial Balance", typeof(ERPGoEdition.Shared.Pages.Reports.TrialBalanceReport)))">Trial Balance</MudNavLink>
+    </MudNavGroup>
+    
+    <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SettingsApplications" OnClick="@(() => OpenTab("System Settings", typeof(Settings)))">Settings</MudNavLink>
 </MudNavMenu>
 
 @code {

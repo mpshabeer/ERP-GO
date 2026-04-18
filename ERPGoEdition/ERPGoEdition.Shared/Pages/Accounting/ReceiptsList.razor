@@ -1,0 +1,55 @@
+@page "/receipts"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Pages
+@inject IVoucherService VoucherService
+@inject ITabService TabService
+
+<div class="pa-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h5" Color="Color.Primary"><b>Receipts</b></MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenNewEntry">New Receipt</MudButton>
+    </div>
+
+    <MudTable Items="@_receipts" Dense="true" Hover="true" Bordered="true" Striped="true" Loading="@_isLoading">
+        <HeaderContent>
+            <MudTh>Date</MudTh>
+            <MudTh>Receipt No</MudTh>
+            <MudTh>Received From</MudTh>
+            <MudTh>Deposited To</MudTh>
+            <MudTh Style="text-align:right;">Amount</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Date.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd><b>@context.ReceiptNo</b></MudTd>
+            <MudTd>@context.PartyAccount?.Name</MudTd>
+            <MudTd>@context.CashBankAccount?.Name</MudTd>
+            <MudTd Style="text-align:right; font-weight:bold; color: #388E3C;">@context.Amount.ToString("N2")</MudTd>
+        </RowTemplate>
+    </MudTable>
+</div>
+
+@code {
+    private List<Receipt> _receipts = new();
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        _receipts = await VoucherService.GetReceiptsAsync();
+        _isLoading = false;
+    }
+
+    private void OpenNewEntry()
+    {
+        TabService.AddTab("New Receipt", builder => {
+            builder.OpenComponent(0, typeof(ReceiptEntry));
+            builder.CloseComponent();
+        });
+    }
+}

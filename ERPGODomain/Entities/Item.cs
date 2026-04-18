@@ -37,6 +37,17 @@ public class Item
 
     public bool IsActive { get; set; } = true;
 
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal GstPercent { get; set; } // Default GST % for this item
+
+    [Column(TypeName = "varchar(8)")]
+    public string? HSNCode { get; set; }
+
+    public bool IsGSTApplicable { get; set; } = true;
+
+    [Column(TypeName = "varchar(20)")]
+    public string TaxType { get; set; } = "GST";
+
     public int? CategoryId { get; set; }
     [ForeignKey(nameof(CategoryId))]
     public Category? Category { get; set; }

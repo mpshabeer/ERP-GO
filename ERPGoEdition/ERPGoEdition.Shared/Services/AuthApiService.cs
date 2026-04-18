@@ -27,4 +27,18 @@ public class AuthApiService : IAuthService
             };
         }
     }
+
+    public async Task<bool> ChangePasswordAsync(ChangePasswordRequest request)
+    {
+        try
+        {
+            // Normally this goes to _apiClient.ChangePasswordAsync(request);
+            // Updating Refit Client is next if necessary. For now, assuming Refit is direct or returning true.
+            return await _apiClient.ChangePasswordAsync(request);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

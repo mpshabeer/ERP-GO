@@ -43,12 +43,14 @@ public class ItemService : IItemService
         {
             using var context = await _contextFactory.CreateDbContextAsync();
 
-            // Prevent tracking issues with related entities
-            if (item.BaseUnit != null) context.Entry(item.BaseUnit).State = EntityState.Unchanged;
-            if (item.Category != null) context.Entry(item.Category).State = EntityState.Unchanged;
+            // Prevent tracking issues with related entities by nullifying navigation properties.
+            // EF Core will use the foreign keys (UnitId, CategoryId) instead.
+            item.BaseUnit = null;
+            item.Category = null;
             foreach (var unit in item.ItemUnits)
             {
-                if (unit.Unit != null) context.Entry(unit.Unit).State = EntityState.Unchanged;
+                unit.Unit = null;
+                unit.Item = null;
             }
 
             context.Items.Add(item);
@@ -103,6 +105,7 @@ public class ItemService : IItemService
         // Load existing item including children to manage the collection
         var existingItem = await context.Items
             .Include(i => i.ItemUnits)
+            .ThenInclude(iu => iu.Unit)
             .FirstOrDefaultAsync(i => i.Id == item.Id);
 
         if (existingItem != null)
@@ -110,9 +113,11 @@ public class ItemService : IItemService
             // Update scalar properties
             context.Entry(existingItem).CurrentValues.SetValues(item);
 
-            // Update BaseUnit relationship if changed
-            // Ensure we don't try to create a new Unit if object is passed
-            if (item.BaseUnit != null) context.Entry(item.BaseUnit).State = EntityState.Unchanged;
+            // Prevent tracking issues on update by nullifying the navigation properties
+            item.BaseUnit = null;
+            item.Category = null;
+            existingItem.BaseUnit = null;
+            existingItem.Category = null;
 
             // Handle ItemUnits Collection (Add/Update/Delete)
             // 1. Delete removed units
@@ -120,6 +125,14 @@ public class ItemService : IItemService
             {
                 if (!item.ItemUnits.Any(u => u.Id == existingUnit.Id && u.Id != 0))
                 {
+                    bool isReferenced = await context.StockLedger.AnyAsync(s => s.ItemUnitId == existingUnit.Id)
+                                     || await context.SalesInvoiceItems.AnyAsync(s => s.ItemUnitId == existingUnit.Id)
+                                     || await context.PurchaseItems.AnyAsync(p => p.ItemUnitId == existingUnit.Id);
+
+                    if (isReferenced)
+                    {
+                        throw new Exception($"Cannot remove unit '{existingUnit.Unit?.Name ?? "ID " + existingUnit.Id}' as it is currently used in transactions.");
+                    }
                     context.ItemUnits.Remove(existingUnit);
                 }
             }
@@ -137,7 +150,8 @@ public class ItemService : IItemService
                 else
                 {
                     // Add
-                    if (unit.Unit != null) context.Entry(unit.Unit).State = EntityState.Unchanged;
+                    unit.Unit = null;
+                    unit.Item = null;
                     existingItem.ItemUnits.Add(unit);
                 }
             }

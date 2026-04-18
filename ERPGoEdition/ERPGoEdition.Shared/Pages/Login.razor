@@ -1,46 +1,102 @@
 @page "/login"
+@layout ERPGoEdition.Shared.Layout.LoginLayout
+@using Blazored.LocalStorage
 @using ERPGOAPPLICATION.DTOs
 @using ERPGOAPPLICATION.Interfaces
+@using ERPGoEdition.Shared.Services
+@using Microsoft.AspNetCore.Components.Authorization
+
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
+@inject ILocalStorageService LocalStorage
+@inject AuthenticationStateProvider AuthStateProvider
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
-    <MudPaper Class="pa-4">
-        <MudText Typo="Typo.h5" GutterBottom="true">Login</MudText>
-        <MudForm @ref="form" @bind-IsValid="@success">
-            <MudTextField T="string" Label="Email" @bind-Value="loginModel.Email" Required="true" RequiredError="Email is required!" />
-            <MudTextField T="string" Label="Password" @bind-Value="loginModel.Password" InputType="InputType.Password" Required="true" RequiredError="Password is required!" />
-            
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" DisableElevation="true" OnClick="@OnLoginAsync" Class="mt-4">Login</MudButton>
-        </MudForm>
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <MudAlert Severity="Severity.Error" Class="mt-2">@errorMessage</MudAlert>
-        }
-    </MudPaper>
-</MudContainer>
+<MudGrid Spacing="0" Class="h-100vh w-100" Style="margin: 0;">
+    <MudItem xs="12" md="6" Class="d-flex align-center justify-center" Style="background-color: var(--mud-palette-primary); color: white;">
+        <div class="pa-10 d-flex flex-column align-center" style="max-width: 500px; text-align: center;">
+            <MudIcon Icon="@Icons.Material.Filled.Dashboard" Style="font-size: 100px; margin-bottom: 2rem;" />
+            <MudText Typo="Typo.h2" Style="font-weight: 700; margin-bottom: 1rem;">ERP GO</MudText>
+            <MudText Typo="Typo.h5" Style="opacity: 0.9;">Professional Enterprise Resource Planning. Streamline your operations securely.</MudText>
+        </div>
+    </MudItem>
+    <MudItem xs="12" md="6" Class="d-flex align-center justify-center">
+        <MudCard Elevation="8" Class="pa-8 d-flex flex-column" Style="width: 100%; max-width: 450px; border-radius: 12px;">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h4" Style="font-weight: 600;">Welcome Back</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Surface" Style="color: gray;">Please enter your details to sign in.</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudTextField T="string" Label="Email or Username" @bind-Value="loginModel.Email" Required="true" RequiredError="User is required!" Variant="Variant.Outlined" Class="mb-4" />
+                    <MudTextField T="string" Label="Password" @bind-Value="loginModel.Password" InputType="InputType.Password" Required="true" RequiredError="Password is required!" Variant="Variant.Outlined" Class="mb-2" />
+                    
+                    <div class="d-flex justify-space-between align-center mb-6">
+                        <MudCheckBox T="bool" Label="Remember me" Color="Color.Primary" />
+                        <MudLink Href="#" Underline="Underline.Hover" Color="Color.Primary">Forgot password?</MudLink>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mb-4">@errorMessage</MudAlert>
+                    }
+                    
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" FullWidth="true" DisableElevation="true" OnClick="@OnLoginAsync">Sign In</MudButton>
+                </MudForm>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
 
 @code {
-    MudForm form;
+    MudForm? form;
     bool success;
     string errorMessage = "";
     LoginRequest loginModel = new LoginRequest();
 
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
     private async Task OnLoginAsync()
     {
-        await form.Validate();
-        if (success)
+        try
         {
-            var result = await AuthService.LoginAsync(loginModel);
-            if (result.IsSuccess)
+
+
+            if (form != null)
             {
-                // Navigate to home or dashboard
-                Navigation.NavigateTo("/");
+                await form.Validate();
+                if (success)
+                {
+                    var result = await AuthService.LoginAsync(loginModel);
+                    if (result.IsSuccess)
+                    {
+                        await LocalStorage.SetItemAsync("authToken", result.Token);
+
+                        if (AuthStateProvider is CustomAuthStateProvider customAuth)
+                        {
+                            customAuth.MarkUserAsAuthenticated(result.Token);
+                        }
+
+                        Navigation.NavigateTo("/");
+                    }
+                    else
+                    {
+                        errorMessage = result.Message;
+                    }
+                }
             }
-            else
-            {
-                errorMessage = result.Message;
-            }
+        }
+        catch(Exception ex)
+        {
+            
         }
     }
 }

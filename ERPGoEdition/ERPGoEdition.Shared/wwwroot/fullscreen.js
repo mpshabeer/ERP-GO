@@ -1,5 +1,5 @@
 window.fullscreenHelper = {
-    toggleFullscreen: function() {
+    toggleFullscreen: function () {
         if (!document.fullscreenElement &&
             !document.mozFullScreenElement &&
             !document.webkitFullscreenElement &&
@@ -30,11 +30,25 @@ window.fullscreenHelper = {
             return false;
         }
     },
-    
-    isFullscreen: function() {
+
+    isFullscreen: function () {
         return !!(document.fullscreenElement ||
-                  document.mozFullScreenElement ||
-                  document.webkitFullscreenElement ||
-                  document.msFullscreenElement);
+            document.mozFullScreenElement ||
+            document.webkitFullscreenElement ||
+            document.msFullscreenElement);
     }
 };
+
+// PDF / File download helper — called from Blazor via JSInterop
+window.downloadFileFromBytes = function (fileName, contentType, bytes) {
+    const blob = new Blob([new Uint8Array(bytes)], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
+

@@ -49,11 +49,11 @@
                     <MudText Typo="Typo.h6">Units List</MudText>
                 </CardHeaderContent>
                  <CardHeaderActions>
-                    <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                    <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
                  </CardHeaderActions>
             </MudCardHeader>
             <MudCardContent>
-                <MudTable Items="@Units" Hover="true" Striped="true" Bordered="true" Dense="true" Filter="new Func<Unit,bool>(FilterFunc)" OnRowClick="@(args => Edit(args.Item))" T="Unit">
+                <MudTable Items="@Units" Hover="true" Striped="true" Bordered="true" Dense="true" Filter="new Func<Unit, bool>(FilterFunc)" OnRowClick="@(args => Edit(args.Item))" T="Unit" >
                     <HeaderContent>
                         <MudTh>Code</MudTh>
                         <MudTh>Name</MudTh>

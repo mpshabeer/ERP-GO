@@ -133,7 +133,7 @@
                         <RowTemplate>
                             <MudTd>@context.Item?.ItemCode</MudTd>
                             <MudTd>@context.Item?.Name</MudTd>
-                            <MudTd>@(context.ItemUnit?.Name ?? context.Item?.BaseUnit?.Name)</MudTd>
+                            <MudTd>@(context.ItemUnit?.Unit?.Name ?? context.Item?.BaseUnit?.Name)</MudTd>
                             <MudTd>@context.Qty</MudTd>
                             <MudTd>@context.Rate.ToString("N2")</MudTd>
                             <MudTd>@context.TotalValue.ToString("N2")</MudTd>
@@ -313,7 +313,7 @@
         {
             foreach (var iu in item.ItemUnits)
             {
-                 var displayName = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                 var displayName = iu.Unit?.Name ?? "Unit";
                  tempUnits.Add(new UnitDisplay 
                  { 
                      Value = iu.Id, 

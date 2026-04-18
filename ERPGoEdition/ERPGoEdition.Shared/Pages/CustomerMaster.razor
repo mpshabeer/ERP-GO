@@ -1,4 +1,6 @@
 @page "/customer-master"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using ERPGOAPPLICATION.Interfaces
 @using ERPGODomain.Entities
 @inject ICustomerService CustomerService
@@ -105,7 +107,7 @@
                             <MudIcon Icon="@(context.IsActive ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" />
                         </MudTd>
                         <MudTd DataLabel="Actions">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" Disabled="@(context.Code == "C1000")" />
                         </MudTd>
                     </RowTemplate>
                     <PagerContent>
@@ -177,6 +179,11 @@
 
     private void Edit(Customer customer)
     {
+        if (customer.Code == "C1000")
+        {
+            Snackbar.Add("Default System Customer cannot be edited.", Severity.Warning);
+            return;
+        }
         // Simple clone for editing
         currentCustomer = new Customer
         {
@@ -197,6 +204,13 @@
 
     private async Task Delete(int id)
     {
+        var customer = Customers.FirstOrDefault(c => c.Id == id);
+        if (customer?.Code == "C1000")
+        {
+            Snackbar.Add("Default System Customer cannot be deleted.", Severity.Warning);
+            return;
+        }
+
         bool? result = await DialogService.ShowMessageBox(
             "Warning", 
             "Deleting can not be undone!", 

@@ -1,0 +1,237 @@
+@page "/purchase-report"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.DTOs
+@using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Services
+@inject IPurchaseService PurchaseService
+@inject ICategoryService CategoryService
+@inject ISupplierService SupplierService
+@inject IReportPdfService PdfService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
+
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;" class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4" Color="Color.Primary"><b>Item-Wise Purchase Report</b></MudText>
+
+    <!-- Filter Card -->
+    <div style="flex: 0 0 auto;" class="mb-4">
+        <MudCard Elevation="2">
+            <MudCardContent Class="py-3 px-4">
+                <MudGrid Class="align-center" Spacing="2">
+                    <MudItem xs="12" sm="2">
+                        <MudDatePicker @bind-Date="_fromDate" Label="From Date" DateFormat="dd/MM/yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudDatePicker @bind-Date="_toDate" Label="To Date" DateFormat="dd/MM/yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudAutocomplete T="Supplier" @bind-Value="_selectedSupplier" SearchFunc="@SearchSuppliers"
+                                         ToStringFunc="@(x => x == null ? null : x.Name)"
+                                         Label="Supplier" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true">
+                            <ItemTemplate Context="s">
+                                <MudText Typo="Typo.body2">@s.Name</MudText>
+                            </ItemTemplate>
+                        </MudAutocomplete>
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudSelect T="int?" @bind-Value="_selectedCategoryId" Label="Category" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true">
+                            @foreach (var cat in _categories)
+                            {
+                                <MudSelectItem T="int?" Value="@cat.Id">@cat.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudTextField Value="@(_selectedItem?.Name ?? "(All Items)")" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Adornment="Adornment.End" 
+                                      AdornmentIcon="@(_selectedItem == null ? Icons.Material.Filled.Search : Icons.Material.Filled.Clear)" 
+                                      OnAdornmentClick="ToggleItemSearch" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2" Class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="LoadReport" Size="Size.Small" FullWidth="true">Search</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Clear" OnClick="ClearFilters" Size="Size.Small" FullWidth="true">Clear</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </div>
+
+    <!-- Action Bar -->
+    <div style="flex: 0 0 auto;" class="d-flex justify-space-between align-center mb-2">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">Showing <b>@(_reportLines.Count)</b> transactions</MudText>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Visibility" Size="Size.Small" Disabled="@(!_reportLines.Any())" OnClick="PreviewPdf">Preview PDF</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" Disabled="@(!_reportLines.Any())" OnClick="DownloadPdf">Download PDF</MudButton>
+        </div>
+    </div>
+
+    <!-- Data Grid -->
+    <div style="flex: 1; overflow-y: auto; min-height: 0;">
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center align-center h-100">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else
+        {
+            <MudTable Items="@_reportLines" Dense="true" Hover="true" Elevation="1" Striped="true" FixedHeader="true" Height="calc(100vh - 350px)">
+                <HeaderContent>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Purchase No</MudTh>
+                    <MudTh>Supplier</MudTh>
+                    <MudTh>Item</MudTh>
+                    <MudTh>Category</MudTh>
+                    <MudTh Style="text-align:right;">Qty</MudTh>
+                    <MudTh Style="text-align:right;">Qty/Base</MudTh>
+                    <MudTh>Unit</MudTh>
+                    <MudTh Style="text-align:right;">Rate</MudTh>
+                    <MudTh Style="text-align:right; font-weight:bold;">Amount</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Date.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd>@context.DocumentNo</MudTd>
+                    <MudTd>@context.PartyName</MudTd>
+                    <MudTd>@context.ItemName (@context.ItemCode)</MudTd>
+                    <MudTd>@context.CategoryName</MudTd>
+                    <MudTd Style="text-align:right; font-weight: bold;">@context.Qty.ToString("N3")</MudTd>
+                    <MudTd Style="text-align:right;">@context.QtyPerBaseUnit.ToString("N2")</MudTd>
+                    <MudTd>@context.UnitName</MudTd>
+                    <MudTd Style="text-align:right; color: #616161;">@context.Rate.ToString("N2")</MudTd>
+                    <MudTd Style="text-align:right; font-weight:bold; color: #F57C00;">@context.Amount.ToString("N2")</MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudPaper Elevation="2" Class="pa-4 mt-2 d-flex justify-end align-center" Style="background-color: #FFF3E0; border: 1px solid #FFCC80;">
+                <MudText Typo="Typo.h6" Color="Color.Primary" Style="color: #F57C00;"><b>Total Purchase Amount:</b> @_reportLines.Sum(x => x.Amount).ToString("N2")</MudText>
+            </MudPaper>
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime? _fromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+    private DateTime? _toDate = DateTime.Now.Date;
+    
+    private List<Category> _categories = new();
+    private int? _selectedCategoryId;
+    
+    private List<Supplier> _allSuppliers = new();
+    private Supplier? _selectedSupplier;
+
+    private Item? _selectedItem;
+
+    private List<ItemWiseReportLine> _reportLines = new();
+    private bool _isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await CategoryService.GetAllCategoriesAsync();
+        _allSuppliers = await SupplierService.GetAllSuppliersAsync();
+    }
+
+    private async Task<IEnumerable<Supplier>> SearchSuppliers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value)) return _allSuppliers;
+        return _allSuppliers.Where(x => x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    private async Task OpenItemSearch()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = DialogService.Show<ERPGoEdition.Shared.Dialogs.ItemSearchDialog>("Search Item", options);
+        var result = await dialog.Result;
+        
+        if (!result.Canceled && result.Data is Item selected)
+        {
+            _selectedItem = selected;
+        }
+    }
+
+    private void ClearItem()
+    {
+        _selectedItem = null;
+    }
+
+    private async Task ToggleItemSearch()
+    {
+        if (_selectedItem == null)
+            await OpenItemSearch();
+        else
+            ClearItem();
+    }
+
+    private PurchaseReportRequest BuildRequest()
+    {
+        return new PurchaseReportRequest
+        {
+            FromDate = _fromDate ?? new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1),
+            ToDate = _toDate ?? DateTime.Now.Date,
+            SupplierId = _selectedSupplier?.Id,
+            CategoryId = _selectedCategoryId,
+            ItemId = _selectedItem?.Id
+        };
+    }
+
+    private async Task LoadReport()
+    {
+        _isLoading = true;
+        try
+        {
+            _reportLines = await PurchaseService.GetPurchaseReportAsync(BuildRequest());
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading report: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        _fromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+        _toDate = DateTime.Now.Date;
+        _selectedSupplier = null;
+        _selectedCategoryId = null;
+        _selectedItem = null;
+        await LoadReport();
+    }
+
+    private async Task PreviewPdf()
+    {
+        if (!_reportLines.Any()) return;
+        
+        try
+        {
+            var pdfBytes = await PdfService.GeneratePurchaseReportAsync(BuildRequest(), _reportLines);
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+            var parameters = new DialogParameters { ["PdfBytes"] = pdfBytes };
+            DialogService.Show<Dialogs.PdfPreviewDialog>("Preview Purchase Report", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating PDF: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DownloadPdf()
+    {
+        if (!_reportLines.Any()) return;
+        
+        try
+        {
+            var pdfBytes = await PdfService.GeneratePurchaseReportAsync(BuildRequest(), _reportLines);
+            var filename = $"PurchaseReport_{DateTime.Now:yyyyMMddHHmmss}.pdf";
+            
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", filename, "application/pdf", pdfBytes);
+            Snackbar.Add("Report downloaded successfully.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading PDF: {ex.Message}", Severity.Error);
+        }
+    }
+}

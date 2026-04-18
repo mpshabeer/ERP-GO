@@ -1,0 +1,99 @@
+@page "/expenses/entry"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.DTOs
+@using ERPGODomain.Entities
+@inject IVoucherService VoucherService
+@inject IAccountingService AccountingService
+@inject ISnackbar Snackbar
+
+<div class="pa-4">
+    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mb-4"><b>New Expense</b></MudText>
+
+    <MudPaper Elevation="2" Class="pa-6">
+        <MudForm @ref="_form" IsValid="@_isValid">
+            <MudGrid Spacing="3">
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_date" Label="Expense Date" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="8"></MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="int" @bind-Value="_request.ExpenseAccountId" Label="Expense Account (e.g. Electricity, Rent)" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (var acc in _accounts.Where(a => a.AccountHead?.Name.Contains("Expense") == true || a.AccountHead?.Name.Contains("Indirect") == true).OrderBy(a => a.Name))
+                        {
+                            <MudSelectItem T="int" Value="acc.Id">@acc.Name (@acc.AccountHead?.Name)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="int" @bind-Value="_request.CashBankAccountId" Label="Paid From (Cash / Bank)" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (var acc in _accounts.OrderBy(a => a.Name))
+                        {
+                            <MudSelectItem T="int" Value="acc.Id">@acc.Name (@acc.AccountHead?.Name)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal" @bind-Value="_request.Amount" Label="Expense Amount" Required="true" Min="0.01m" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Adornment="Adornment.Start" AdornmentText="₹" />
+                </MudItem>
+
+                <MudItem xs="12" sm="12">
+                    <MudTextField @bind-Value="_request.Narration" Label="Narration / Remarks" Lines="2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+            </MudGrid>
+
+            <div class="d-flex justify-end mt-6 gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="@_isSaving">Save Expense</MudButton>
+            </div>
+        </MudForm>
+    </MudPaper>
+</div>
+
+@code {
+    private MudForm _form = null!;
+    private bool _isValid;
+    private bool _isSaving;
+    
+    private DateTime? _date = DateTime.Now.Date;
+    private ExpenseRequest _request = new();
+    private List<Account> _accounts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _accounts = await AccountingService.GetAccountsAsync();
+    }
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+
+        if (_request.ExpenseAccountId == 0 || _request.CashBankAccountId == 0)
+        {
+            Snackbar.Add("Please select both accounts.", Severity.Warning);
+            return;
+        }
+
+        _request.Date = _date ?? DateTime.Now.Date;
+        _isSaving = true;
+        try
+        {
+            await VoucherService.CreateExpenseAsync(_request);
+            Snackbar.Add("Expense saved successfully!", Severity.Success);
+            
+            _request = new ExpenseRequest();
+            _date = DateTime.Now.Date;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving expense: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

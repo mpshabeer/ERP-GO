@@ -38,4 +38,9 @@ public class SalesApiService : ISalesService
     {
         return await _apiClient.UpdateInvoice(invoice);
     }
+
+    public Task<List<ItemWiseReportLine>> GetSalesReportAsync(SalesReportRequest request)
+    {
+        throw new NotImplementedException();
+    }
 }

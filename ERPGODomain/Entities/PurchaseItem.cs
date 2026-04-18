@@ -25,6 +25,9 @@ public class PurchaseItem
 
     public int? ItemUnitId { get; set; }
 
+    [Column(TypeName = "decimal(18,3)")]
+    public decimal QtyPerBaseUnit { get; set; }
+
     [ForeignKey(nameof(ItemUnitId))]
     public ItemUnit? ItemUnit { get; set; }
 

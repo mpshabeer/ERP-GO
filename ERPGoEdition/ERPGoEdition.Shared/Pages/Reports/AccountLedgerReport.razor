@@ -1,0 +1,200 @@
+@page "/reports/account-ledger"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.DTOs
+@using ERPGODomain.Entities
+@using ERPGoEdition.Shared.Services
+@inject IAccountingService AccountingService
+@inject IReportPdfService PdfService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
+
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;" class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4" Color="Color.Primary"><b>Account Ledger</b></MudText>
+
+    <!-- Filter Card -->
+    <div style="flex: 0 0 auto;" class="mb-4">
+        <MudCard Elevation="2">
+            <MudCardContent Class="py-3 px-4">
+                <MudGrid Class="align-center" Spacing="2">
+                    <MudItem xs="12" sm="2">
+                        <MudDatePicker @bind-Date="_fromDate" Label="From Date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudDatePicker @bind-Date="_toDate" Label="To Date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="int?" @bind-Value="_accountId" Label="Select Account" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true">
+                            @foreach (var acc in _accounts.OrderBy(a => a.Name))
+                            {
+                                <MudSelectItem T="int?" Value="acc.Id">@acc.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4" Class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="LoadReport" Size="Size.Small" FullWidth="true" Disabled="@(!_accountId.HasValue)">Search</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearFilters" Size="Size.Small">Clear</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </div>
+
+    <!-- Action Bar -->
+    <div style="flex: 0 0 auto;" class="d-flex justify-space-between align-center mb-2">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            @if (_reportResult != null) { <span>Showing <b>@_reportResult.Lines.Count</b> transactions. Opening Balance: <b>@_reportResult.OpeningBalance.ToString("N2")</b></span> }
+        </MudText>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Visibility" Size="Size.Small" Disabled="@(_reportResult == null)" OnClick="PreviewPdf">Preview PDF</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" Disabled="@(_reportResult == null)" OnClick="DownloadPdf">Download PDF</MudButton>
+        </div>
+    </div>
+
+    <!-- Data Grid -->
+    <div style="flex: 1; overflow-y: auto; min-height: 0;">
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center align-center h-100">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+        else if (_reportResult == null && _hasSearched)
+        {
+            <MudPaper Elevation="0" Class="d-flex flex-column align-center justify-center pa-8" Style="min-height: 200px; border: 2px dashed #e0e0e0;">
+                <MudIcon Icon="@Icons.Material.Filled.MenuBook" Size="Size.Large" Color="Color.Tertiary" />
+                <MudText Typo="Typo.body1" Class="mt-2" Color="Color.Tertiary">No ledger data found for to display.</MudText>
+            </MudPaper>
+        }
+        else if (_reportResult != null)
+        {
+            <MudTable Items="@_reportResult.Lines" Dense="true" Hover="true" Bordered="true" Striped="true" FixedHeader="true" Height="100%">
+                <HeaderContent>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Voucher No</MudTh>
+                    <MudTh>Particulars</MudTh>
+                    <MudTh Style="text-align:right;">Debit (Dr)</MudTh>
+                    <MudTh Style="text-align:right;">Credit (Cr)</MudTh>
+                    <MudTh Style="text-align:right; font-weight:bold;">Balance</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Date.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd>@context.VoucherNo</MudTd>
+                    <MudTd>@context.Description</MudTd>
+                    <MudTd Style="text-align:right; color: #D32F2F;">@(context.Debit > 0 ? context.Debit.ToString("N2") : "-")</MudTd>
+                    <MudTd Style="text-align:right; color: #388E3C;">@(context.Credit > 0 ? context.Credit.ToString("N2") : "-")</MudTd>
+                    <MudTd Style="text-align:right; font-weight:bold;">@context.Balance.ToString("N2")</MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudPaper Elevation="2" Class="pa-4 mt-2 d-flex justify-space-between align-center" Style="background-color: #E3F2FD; border: 1px solid #90CAF9;">
+                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Total Debit: <b>@_reportResult.TotalDebit.ToString("N2")</b></MudText>
+                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Total Credit: <b>@_reportResult.TotalCredit.ToString("N2")</b></MudText>
+                <MudText Typo="Typo.h6" Color="Color.Primary"><b>Closing Balance:</b> @_reportResult.ClosingBalance.ToString("N2")</MudText>
+            </MudPaper>
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime? _fromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+    private DateTime? _toDate = DateTime.Now.Date;
+    private int? _accountId;
+
+    private LedgerReportResult? _reportResult;
+    private List<Account> _accounts = new();
+    
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    private bool _isPdfLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _accounts = await AccountingService.GetAccountsAsync();
+    }
+
+    private LedgerReportRequest BuildRequest()
+    {
+        return new LedgerReportRequest
+        {
+            FromDate = _fromDate,
+            ToDate = _toDate,
+            AccountId = _accountId ?? 0
+        };
+    }
+
+    private async Task LoadReport()
+    {
+        if (!_accountId.HasValue || _accountId.Value == 0)
+        {
+            Snackbar.Add("Please select an Account to view its ledger.", Severity.Warning);
+            return;
+        }
+
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+
+        try
+        {
+            _reportResult = await AccountingService.GetAccountLedgerAsync(BuildRequest());
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading ledger: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _fromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+        _toDate = DateTime.Now.Date;
+        _accountId = null;
+        _reportResult = null;
+        _hasSearched = false;
+    }
+
+    private async Task PreviewPdf()
+    {
+        if (_isPdfLoading || _reportResult == null) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PdfService.GenerateAccountLedgerPdfAsync(_reportResult);
+            var parameters = new DialogParameters { ["PdfBytes"] = bytes };
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            DialogService.Show<ERPGoEdition.Shared.Pages.Dialogs.PdfPreviewDialog>($"Preview Ledger", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
+    private async Task DownloadPdf()
+    {
+        if (_isPdfLoading || _reportResult == null) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PdfService.GenerateAccountLedgerPdfAsync(_reportResult);
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", $"AccountLedger_{DateTime.Now:yyyyMMdd}.pdf", "application/pdf", bytes);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading PDF: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+}

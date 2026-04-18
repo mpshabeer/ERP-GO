@@ -19,4 +19,7 @@ public interface IStockService
     Task<PaginatedResult<OpeningStockHistory>> GetPaginatedOpeningStockHistory(string? search, int page, int pageSize);
 
     Task<decimal> GetStock(int itemId);
+    
+    // Reports
+    Task<List<StockReportLine>> GetStockReportAsync(StockReportRequest request);
 }

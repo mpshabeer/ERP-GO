@@ -10,4 +10,5 @@ public interface IUnitService
     Task<Unit> AddUnitAsync(Unit unit);
     Task<Unit> UpdateUnitAsync(Unit unit);
     Task DeleteUnitAsync(int id);
+    Task<List<Unit>> GetAllUnitsIncludeInactiveAsync();
 }

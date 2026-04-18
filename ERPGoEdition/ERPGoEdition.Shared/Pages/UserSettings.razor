@@ -1,0 +1,86 @@
+@page "/settings/user"
+@using ERPGOAPPLICATION.DTOs
+@using ERPGOAPPLICATION.Interfaces
+@inject IAuthService AuthService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+    <MudText Typo="Typo.h5" GutterBottom="true">User Settings</MudText>
+    <MudText Typo="Typo.body1" Class="mb-6">Manage your account preferences and security.</MudText>
+
+    <MudPaper Class="pa-6" Elevation="4">
+        <MudText Typo="Typo.h6" Class="mb-4">Change Password</MudText>
+        
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudTextField T="string" Label="Current Password" @bind-Value="model.CurrentPassword" InputType="InputType.Password" Required="true" RequiredError="Current password is required!" Variant="Variant.Outlined" Class="mb-4" />
+            
+            <MudTextField T="string" @ref="newPasswordField" Label="New Password" @bind-Value="model.NewPassword" InputType="InputType.Password" Required="true" RequiredError="New password is required!" Variant="Variant.Outlined" Class="mb-4" />
+            
+            <MudTextField T="string" Label="Confirm New Password" @bind-Value="confirmPassword" InputType="InputType.Password" Required="true" RequiredError="Confirm password is required!" Validation="@(new Func<string, string>(PasswordMatch))" Variant="Variant.Outlined" Class="mb-6" />
+            
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DisableElevation="true" OnClick="@OnChangePasswordAsync" Class="mt-2" Disabled="@isSubmitting">
+                @if (isSubmitting)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                    <MudText Class="ms-2">Processing</MudText>
+                }
+                else
+                {
+                    <MudText>Update Password</MudText>
+                }
+            </MudButton>
+        </MudForm>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    MudForm? form;
+    MudTextField<string>? newPasswordField;
+    bool success;
+    bool isSubmitting;
+    string confirmPassword = "";
+    
+    ChangePasswordRequest model = new ChangePasswordRequest();
+
+    // In a real app we'd get this from the Auth State ClaimsPrincipal
+    // but for now we hardcode admin ID corresponding to DB Seed
+    protected override void OnInitialized()
+    {
+        model.UserId = 1;
+    }
+
+    private string PasswordMatch(string arg)
+    {
+        if (newPasswordField?.Value != arg)
+            return "Passwords don't match";
+        return null;
+    }
+
+    private async Task OnChangePasswordAsync()
+    {
+        if (form != null)
+        {
+            await form.Validate();
+            if (success)
+            {
+                isSubmitting = true;
+                
+                var result = await AuthService.ChangePasswordAsync(model);
+                
+                isSubmitting = false;
+                
+                if (result)
+                {
+                    Snackbar.Add("Password updated successfully!", Severity.Success);
+                    model = new ChangePasswordRequest { UserId = 1 };
+                    confirmPassword = "";
+                    StateHasChanged();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to update password. Please check your current password.", Severity.Error);
+                }
+            }
+        }
+    }
+}

@@ -56,4 +56,9 @@ public class PurchaseApiService : IPurchaseService
     {
         await _apiClient.DeletePurchaseAsync(id);
     }
+
+    public Task<List<ItemWiseReportLine>> GetPurchaseReportAsync(PurchaseReportRequest request)
+    {
+        throw new NotImplementedException();
+    }
 }

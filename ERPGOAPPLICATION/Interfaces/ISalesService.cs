@@ -9,4 +9,5 @@ public interface ISalesService
     Task<string> GetNextInvoiceNumber();
     Task<PagedResult<SalesInvoice>> GetInvoicesAsync(InvoiceSearchRequest request);
     Task<SalesInvoice> UpdateInvoice(SalesInvoice invoice);
+    Task<List<ItemWiseReportLine>> GetSalesReportAsync(SalesReportRequest request);
 }

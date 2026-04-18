@@ -1,0 +1,163 @@
+@page "/reports/trial-balance"
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.DTOs
+@using ERPGoEdition.Shared.Services
+@inject IAccountingService AccountingService
+@inject IReportPdfService PdfService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
+
+<div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;" class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4" Color="Color.Primary"><b>Trial Balance</b></MudText>
+
+    <!-- Filter Card -->
+    <div style="flex: 0 0 auto;" class="mb-4">
+        <MudCard Elevation="2">
+            <MudCardContent Class="py-3 px-4">
+                <MudGrid Class="align-center" Spacing="2">
+                    <MudItem xs="12" sm="3">
+                        <MudDatePicker @bind-Date="_asOfDate" Label="As Of Date" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="9" Class="d-flex gap-2 justify-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="LoadReport" Size="Size.Small">Generate Trial Balance</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </div>
+
+    <!-- Action Bar -->
+    <div style="flex: 0 0 auto;" class="d-flex justify-space-between align-center mb-2">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            @if (_reportResult != null) { <span>Showing <b>@_reportResult.Lines.Count</b> active accounts.</span> }
+        </MudText>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Visibility" Size="Size.Small" Disabled="@(_reportResult == null)" OnClick="PreviewPdf">Preview PDF</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" Disabled="@(_reportResult == null)" OnClick="DownloadPdf">Download PDF</MudButton>
+        </div>
+    </div>
+
+    <!-- Data Grid -->
+    <div style="flex: 1; overflow-y: auto; min-height: 0;">
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center align-center h-100">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+        else if (_reportResult == null && _hasSearched)
+        {
+            <MudPaper Elevation="0" Class="d-flex flex-column align-center justify-center pa-8" Style="min-height: 200px; border: 2px dashed #e0e0e0;">
+                <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Size="Size.Large" Color="Color.Tertiary" />
+                <MudText Typo="Typo.body1" Class="mt-2" Color="Color.Tertiary">No balances found up to the selected date.</MudText>
+            </MudPaper>
+        }
+        else if (_reportResult != null)
+        {
+            <MudTable Items="@_reportResult.Lines" Dense="true" Hover="true" Bordered="true" Striped="true" FixedHeader="true" Height="100%">
+                <HeaderContent>
+                    <MudTh>Account Group</MudTh>
+                    <MudTh>Account Head</MudTh>
+                    <MudTh>Account Name</MudTh>
+                    <MudTh Style="text-align:right;">Debit Balance</MudTh>
+                    <MudTh Style="text-align:right;">Credit Balance</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd><b>@context.AccountGroupName</b></MudTd>
+                    <MudTd Style="color: #616161;">@context.AccountHeadName</MudTd>
+                    <MudTd>@context.AccountName</MudTd>
+                    <MudTd Style="text-align:right; color: #D32F2F;">@(context.DebitBalance > 0 ? context.DebitBalance.ToString("N2") : "-")</MudTd>
+                    <MudTd Style="text-align:right; color: #388E3C;">@(context.CreditBalance > 0 ? context.CreditBalance.ToString("N2") : "-")</MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudPaper Elevation="2" Class="pa-4 mt-2 d-flex justify-space-between align-center" Style="background-color: #EDE7F6; border: 1px solid #B39DDB;">
+                <MudText Typo="Typo.h6" Color="Color.Primary"><b>TOTALS:</b></MudText>
+                <div class="d-flex gap-8">
+                    <MudText Typo="Typo.subtitle1" Color="@(_reportResult.TotalDebit == _reportResult.TotalCredit ? Color.Success : Color.Error)">
+                        <b>Dr:</b> @_reportResult.TotalDebit.ToString("N2")
+                    </MudText>
+                    <MudText Typo="Typo.subtitle1" Color="@(_reportResult.TotalDebit == _reportResult.TotalCredit ? Color.Success : Color.Error)">
+                        <b>Cr:</b> @_reportResult.TotalCredit.ToString("N2")
+                    </MudText>
+                </div>
+            </MudPaper>
+            @if (_reportResult.TotalDebit != _reportResult.TotalCredit)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-2">Warning: Trial Balance does not match. There may be a data integrity issue in the journal entries.</MudAlert>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime? _asOfDate = DateTime.Now.Date;
+
+    private TrialBalanceResult? _reportResult;
+    
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    private bool _isPdfLoading = false;
+
+    private async Task LoadReport()
+    {
+        _isLoading = true;
+        _hasSearched = true;
+        StateHasChanged();
+
+        try
+        {
+            var date = _asOfDate ?? DateTime.Now.Date;
+            _reportResult = await AccountingService.GetTrialBalanceAsync(date);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading trial balance: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PreviewPdf()
+    {
+        if (_isPdfLoading || _reportResult == null) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PdfService.GenerateTrialBalancePdfAsync(_reportResult);
+            var parameters = new DialogParameters { ["PdfBytes"] = bytes };
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            DialogService.Show<ERPGoEdition.Shared.Pages.Dialogs.PdfPreviewDialog>($"Preview Trial Balance", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
+    private async Task DownloadPdf()
+    {
+        if (_isPdfLoading || _reportResult == null) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PdfService.GenerateTrialBalancePdfAsync(_reportResult);
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", $"TrialBalance_{DateTime.Now:yyyyMMdd}.pdf", "application/pdf", bytes);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading PDF: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+}

@@ -58,4 +58,9 @@ public class StockApiService : IStockService
     {
         return await _apiClient.GetPaginatedOpeningStockHistory(search, page, pageSize);
     }
+
+    public Task<List<StockReportLine>> GetStockReportAsync(StockReportRequest request)
+    {
+        throw new NotImplementedException("Stock Report API not implemented for WebAssembly client.");
+    }
 }

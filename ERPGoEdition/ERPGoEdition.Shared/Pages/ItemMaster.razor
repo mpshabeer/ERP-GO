@@ -1,4 +1,6 @@
 @page "/item-master"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using ERPGOAPPLICATION.Interfaces
 @using ERPGODomain.Entities
 @inject IItemService ItemService
@@ -80,7 +82,7 @@
                         <MudGrid Spacing="1">
                             <!-- Row 1: Identifiers -->
                             <MudItem xs="6">
-                                <MudTextField T="string" Label="Item Name" @bind-Value="currentItem.Name" Required="true" RequiredError="X" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" Style="font-weight: bold;" />
+                                <MudTextField T="string" Label="Item Name" @bind-Value="currentItem.Name" Required="true" RequiredError="Item name is required" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" Style="font-weight: bold;" />
                             </MudItem>
                             <MudItem xs="3">
                                 <MudTextField T="string" Label="Code" @bind-Value="currentItem.ItemCode" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" />
@@ -99,78 +101,118 @@
                                 </MudSelect>
                             </MudItem>
                             <MudItem xs="3">
-                                <MudSelect T="int" Label="Base Unit" @bind-Value="currentItem.UnitId" Required="true" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" AnchorOrigin="Origin.BottomCenter">
+                                <MudSelect T="int" Label="Base Unit" Value="currentItem.UnitId" ValueChanged="OnBaseUnitChanged" Required="true" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" AnchorOrigin="Origin.BottomCenter">
                                     <MudSelectItem Value="0" Disabled="true">Unit</MudSelectItem>
-                                    @foreach (var unit in Units)
+                                    @foreach (var unit in Units.Where(u => u.IsActive || u.Id == currentItem.UnitId).DistinctBy(u => u.Id))
                                     {
                                         <MudSelectItem Value="@unit.Id">@unit.Name</MudSelectItem>
                                     }
                                 </MudSelect>
                             </MudItem>
                             <MudItem xs="3">
-                                <MudNumericField T="decimal" Label="Stock" @bind-Value="currentItem.CurrentStock" Format="N0" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" Disabled="@(currentItem.Id != 0)" HideSpinButtons="true" />
+                                <MudNumericField T="decimal" Label="Stock" @bind-Value="currentItem.CurrentStock" Format="N0" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" Disabled="@(currentItem.Id != 0)" HideSpinButtons="true" Style="text-align: right;" />
                             </MudItem>
-                             <MudItem xs="3" Class="d-flex align-center">
-                                <MudCheckBox T="bool" Label="Multi-Unit" @bind-Value="currentItem.IsMultiUnit" Color="Color.Primary" Dense="true" Size="Size.Small" />
+                             <MudItem xs="3" Class="d-flex align-center mt-2">
+                                <MudCheckBox T="bool" Label="Multi-Unit" Value="currentItem.IsMultiUnit" ValueChanged="@((bool v) => OnIsMultiUnitChanged(v))" Color="Color.Primary" Dense="true" Size="Size.Small" />
                             </MudItem>
 
                             <!-- Row 3: Pricing (Compact) -->
-                            <MudItem xs="4">
-                                <MudNumericField T="decimal" Label="Sales Rate" @bind-Value="currentItem.Rate" Format="N2" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HideSpinButtons="true" />
+                            <MudItem xs="3">
+                                <MudNumericField T="decimal" Label="Sales Rate" Value="currentItem.Rate" ValueChanged="OnSalesRateChanged" Format="N2" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HideSpinButtons="true" Style="text-align: right;" />
                             </MudItem>
-                            <MudItem xs="4">
-                                <MudNumericField T="decimal" Label="Purchase Rate" @bind-Value="currentItem.PurchaseRate" Format="N2" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HideSpinButtons="true" />
+                            <MudItem xs="3">
+                                <MudNumericField T="decimal" Label="Purchase Rate" Value="currentItem.PurchaseRate" ValueChanged="OnPurRateChanged" Format="N2" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HideSpinButtons="true" Style="text-align: right;" />
                             </MudItem>
-                            <MudItem xs="4">
-                                <MudNumericField T="decimal" Label="Wholesale" @bind-Value="currentItem.WholesaleRate" Format="N2" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HideSpinButtons="true" />
+                            <MudItem xs="3">
+                                <MudNumericField T="decimal" Label="Wholesale" Value="currentItem.WholesaleRate" ValueChanged="OnWholesaleRateChanged" Format="N2" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HideSpinButtons="true" Style="text-align: right;" />
+                            </MudItem>
+                            <MudItem xs="3"></MudItem> <!-- Spacer for alignment -->
+
+                            <!-- Row 4: GST & Taxes -->
+                            <MudItem xs="3">
+                                <MudTextField T="string" Label="HSN Code" @bind-Value="currentItem.HSNCode" MaxLength="8" Pattern="[0-9]*" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HelperText="Numeric only" />
+                            </MudItem>
+                            <MudItem xs="3">
+                                <MudNumericField T="decimal" Label="GST %" @bind-Value="currentItem.GstPercent" Format="N2" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" HideSpinButtons="true" Min="0" Max="28" Disabled="@(!currentItem.IsGSTApplicable)"
+                                                Adornment="Adornment.End" AdornmentText="%" Style="border-left: 3px solid #2E7D32; text-align: right;" />
+                            </MudItem>
+                            <MudItem xs="3" Class="d-flex align-center mt-2">
+                                <MudCheckBox T="bool" Label="GST Applicable" Value="currentItem.IsGSTApplicable" ValueChanged="OnGstApplicableChanged" Color="Color.Primary" Dense="true" Size="Size.Small" />
+                            </MudItem>
+                            <MudItem xs="3">
+                                <MudSelect T="string" Label="Tax Type" @bind-Value="currentItem.TaxType" Variant="Variant.Outlined" Margin="Margin.None" Dense="true" AnchorOrigin="Origin.BottomCenter">
+                                    <MudSelectItem Value="@("GST")">GST</MudSelectItem>
+                                    <MudSelectItem Value="@("Exempt")">Exempt</MudSelectItem>
+                                    <MudSelectItem Value="@("Nil Rated")">Nil Rated</MudSelectItem>
+                                    <MudSelectItem Value="@("Non-GST")">Non-GST</MudSelectItem>
+                                </MudSelect>
                             </MudItem>
 
                             <!-- Row 4: Multi-Unit Grid (If Enabled) -->
                             @if (currentItem.IsMultiUnit)
                             {
                                 <MudItem xs="12">
-                                    <MudStack Row="true" Class="my-1">
-                                         <MudText Typo="Typo.subtitle2" Class="mt-1"><b>Packings</b></MudText>
+                                    <MudStack Row="true" Class="my-1 align-center">
+                                         <MudText Typo="Typo.subtitle2"><b>Packings / Units</b></MudText>
                                          <MudSpacer />
-                                         <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddUnitRow())" Color="Color.Secondary" Class="py-0">Add</MudButton>
+                                         <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddUnitRow())" Color="Color.Secondary" Class="py-0">Add Packing</MudButton>
                                     </MudStack>
                                     
                                     <MudTable Items="@currentItem.ItemUnits" Hover="true" Dense="true" Bordered="true" Striped="true" Elevation="0" Outlined="true" Class="mt-1">
                                         <HeaderContent>
-                                            <MudTh Style="padding: 2px;">Unit</MudTh>
-                                            <MudTh Style="padding: 2px;">Name</MudTh>
-                                            <MudTh Style="padding: 2px;">Code</MudTh>
-                                            <MudTh Style="padding: 2px;">Qty</MudTh>
-                                            <MudTh Style="padding: 2px;">Sales</MudTh>
-                                            <MudTh Style="padding: 2px;">Pur</MudTh>
-                                            <MudTh Style="width: 30px; padding: 2px;"></MudTh>
+                                            <MudTh Style="width: 25%; padding: 4px;">Unit</MudTh>
+                                            <MudTh Style="width: 20%; padding: 4px; text-align:right;">Qty/Base</MudTh>
+                                            <MudTh Style="width: 20%; padding: 4px; text-align:right;">Sales Rate</MudTh>
+                                            <MudTh Style="width: 20%; padding: 4px; text-align:right;">Pur Rate</MudTh>
+                                            <MudTh Style="width: 15%; padding: 4px; text-align:center;">Action</MudTh>
                                         </HeaderContent>
                                         <RowTemplate>
-                                            <MudTd DataLabel="Unit" Style="padding: 0px;">
-                                                <MudSelect T="int" @bind-Value="context.UnitId" Margin="Margin.None" Variant="Variant.Text" Style="font-size: 0.8rem" DisableUnderLine="true" Dense="true">
-                                                    @foreach (var unit in Units)
-                                                    {
-                                                        <MudSelectItem Value="@unit.Id">@unit.Name</MudSelectItem>
-                                                    }
-                                                </MudSelect>
+                                            @{
+                                                var isBaseRow = context.UnitId == currentItem.UnitId || (currentItem.ItemUnits.ToList().IndexOf(context) == 0);
+                                                // If it is the base row, forcibly sync to the primary unit so visually it makes sense
+                                                if (isBaseRow && context.UnitId != currentItem.UnitId) { context.UnitId = currentItem.UnitId; }
+                                            }
+                                            <MudTd DataLabel="Unit" Style="width: 25%; padding: 2px 4px; border-right: 1px solid #e0e0e0;">
+                                                @if (isBaseRow)
+                                                {
+                                                    <MudText Style="font-size:0.8rem; font-weight:600;">@(Units.FirstOrDefault(u => u.Id == context.UnitId)?.Name ?? "—") <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Style="font-size:0.65rem; height:16px; padding:0 4px;">Base</MudChip></MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudSelect T="int" Value="context.UnitId" ValueChanged="@((int v) => OnItemUnitChanged(context, v))" Margin="Margin.None" Variant="Variant.Text" Style="font-size: 0.8rem" DisableUnderLine="true" Dense="true">
+                                                        @foreach (var unit in Units.Where(u => u.Id == context.UnitId || (u.IsActive && !currentItem.ItemUnits.Any(iu => iu.UnitId == u.Id))).DistinctBy(u => u.Id))
+                                                        {
+                                                            <MudSelectItem Value="@unit.Id">@unit.Name</MudSelectItem>
+                                                        }
+                                                    </MudSelect>
+                                                }
                                             </MudTd>
-                                            <MudTd DataLabel="Name" Style="padding: 0px;">
-                                                <MudTextField @bind-Value="context.Name" Margin="Margin.None" Variant="Variant.Text" DisableUnderLine="true" Placeholder="Name" />
+                                            <MudTd DataLabel="Qty/Base" Style="width: 20%; padding: 2px; text-align:right; border-right: 1px solid #e0e0e0;">
+                                                @if (isBaseRow) {
+                                                    <MudNumericField T="decimal" Value="1m" Margin="Margin.None" Variant="Variant.Text" DisableUnderLine="true" HideSpinButtons="true" Disabled="true" Style="text-align:right;" />
+                                                } else {
+                                                    <MudNumericField @bind-Value="context.QtyPerBaseUnit" Margin="Margin.None" Variant="Variant.Text" DisableUnderLine="true" HideSpinButtons="true" Style="text-align:right;" />
+                                                }
                                             </MudTd>
-                                            <MudTd DataLabel="Code" Style="padding: 0px;">
-                                                <MudTextField @bind-Value="context.ItemUnitCode" Margin="Margin.None" Variant="Variant.Text" DisableUnderLine="true" Placeholder="Code" />
+                                            <MudTd DataLabel="Sales Rate" Style="width: 20%; padding: 2px; text-align:right; border-right: 1px solid #e0e0e0;">
+                                                @if (isBaseRow) {
+                                                    <MudNumericField T="decimal" Value="currentItem.Rate" ValueChanged="OnSalesRateChanged" Margin="Margin.None" Variant="Variant.Text" Format="N2" DisableUnderLine="true" HideSpinButtons="true" Style="text-align:right;" />
+                                                } else {
+                                                    <MudNumericField @bind-Value="context.Rate" Margin="Margin.None" Variant="Variant.Text" Format="N2" DisableUnderLine="true" HideSpinButtons="true" Style="text-align:right;" />
+                                                }
                                             </MudTd>
-                                            <MudTd DataLabel="Qty" Style="padding: 0px;">
-                                                <MudNumericField @bind-Value="context.QtyPerBaseUnit" Margin="Margin.None" Variant="Variant.Text" DisableUnderLine="true" HideSpinButtons="true" />
+                                            <MudTd DataLabel="Pur Rate" Style="width: 20%; padding: 2px; text-align:right; border-right: 1px solid #e0e0e0;">
+                                                @if (isBaseRow) {
+                                                    <MudNumericField T="decimal" Value="currentItem.PurchaseRate" ValueChanged="OnPurRateChanged" Margin="Margin.None" Variant="Variant.Text" Format="N2" DisableUnderLine="true" HideSpinButtons="true" Style="text-align:right;" />
+                                                } else {
+                                                    <MudNumericField @bind-Value="context.PurchaseRate" Margin="Margin.None" Variant="Variant.Text" Format="N2" DisableUnderLine="true" HideSpinButtons="true" Style="text-align:right;" />
+                                                }
                                             </MudTd>
-                                            <MudTd DataLabel="Sales" Style="padding: 0px;">
-                                                <MudNumericField @bind-Value="context.Rate" Margin="Margin.None" Variant="Variant.Text" DisableUnderLine="true" HideSpinButtons="true" />
-                                            </MudTd>
-                                            <MudTd DataLabel="Pur" Style="padding: 0px;">
-                                                <MudNumericField @bind-Value="context.PurchaseRate" Margin="Margin.None" Variant="Variant.Text" DisableUnderLine="true" HideSpinButtons="true" />
-                                            </MudTd>
-                                            <MudTd Style="padding: 0px; text-align:center;">
-                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => RemoveUnitRow(context))" Size="Size.Small" Color="Color.Error" />
+                                            <MudTd Style="width: 15%; padding: 0px; text-align:center;">
+                                                @if (!isBaseRow)
+                                                {
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => RemoveUnitRow(context))" Size="Size.Small" Color="Color.Error" />
+                                                }
                                             </MudTd>
                                         </RowTemplate>
                                     </MudTable>
@@ -225,7 +267,7 @@
         // 2. Load Units
         try
         {
-            Units = await UnitService.GetAllUnitsAsync();
+            Units = await UnitService.GetAllUnitsIncludeInactiveAsync();
         }
         catch (Exception ex)
         {
@@ -244,6 +286,19 @@
         }
         
         FilterItems(); 
+    }
+
+    private void OnGstApplicableChanged(bool isApplicable)
+    {
+        currentItem.IsGSTApplicable = isApplicable;
+        if (!isApplicable)
+        {
+            currentItem.GstPercent = 0;
+            if (currentItem.TaxType == "GST")
+            {
+                currentItem.TaxType = "Non-GST";
+            }
+        }
     }
     
     private void FilterItems()
@@ -288,10 +343,46 @@
             var cat = Categories.FirstOrDefault(c => c.Id == categoryId.Value);
             if (cat?.DefaultUnitId != null && cat.DefaultUnitId > 0)
             {
-                currentItem.UnitId = cat.DefaultUnitId.Value;
+                OnBaseUnitChanged(cat.DefaultUnitId.Value);
             }
         }
     }
+
+    private void OnBaseUnitChanged(int newUnitId)
+    {
+        currentItem.UnitId = newUnitId;
+        
+        if (currentItem.IsMultiUnit && currentItem.ItemUnits != null && currentItem.ItemUnits.Any())
+        {
+            var list = currentItem.ItemUnits.ToList();
+            var baseRow = list.FirstOrDefault();
+            if (baseRow != null)
+            {
+                baseRow.UnitId = newUnitId;
+                baseRow.QtyPerBaseUnit = 1;
+            }
+        }
+    }
+
+    private void OnRateChanged(decimal newValue, string rateType)
+    {
+        if (rateType == "Sales") currentItem.Rate = newValue;
+        else if (rateType == "Purchase") currentItem.PurchaseRate = newValue;
+        else if (rateType == "Wholesale") currentItem.WholesaleRate = newValue;
+
+        // If multi-unit, sync the first row explicitly just in case (though UI binding also handles it)
+        if (currentItem.IsMultiUnit && currentItem.ItemUnits != null && currentItem.ItemUnits.Any())
+        {
+            var baseRow = currentItem.ItemUnits.First();
+            if (rateType == "Sales") baseRow.Rate = newValue;
+            else if (rateType == "Purchase") baseRow.PurchaseRate = newValue;
+            else if (rateType == "Wholesale") baseRow.WholesaleRate = newValue;
+        }
+    }
+
+    private void OnSalesRateChanged(decimal v) => OnRateChanged(v, "Sales");
+    private void OnPurRateChanged(decimal v) => OnRateChanged(v, "Purchase");
+    private void OnWholesaleRateChanged(decimal v) => OnRateChanged(v, "Wholesale");
 
     private async Task CreateNew()
     {
@@ -299,16 +390,28 @@
         {
             selectedItem = null; // Deselect list
             
-            var defaultUnit = Units.FirstOrDefault(u => u.Name.Equals("PCS", StringComparison.OrdinalIgnoreCase)) 
-                           ?? Units.FirstOrDefault(u => u.Name.Equals("NOS", StringComparison.OrdinalIgnoreCase))
-                           ?? Units.FirstOrDefault();
+            var defaultUnit = Units.FirstOrDefault(u => u.IsActive && u.Name.Equals("PCS", StringComparison.OrdinalIgnoreCase)) 
+                           ?? Units.FirstOrDefault(u => u.IsActive && u.Name.Equals("NOS", StringComparison.OrdinalIgnoreCase))
+                           ?? Units.FirstOrDefault(u => u.IsActive);
 
             currentItem = new Item 
             { 
+                Name = "",
+                ItemCode = "",
+                Barcode = "",
                 IsActive = true, 
                 CategoryId = null,
                 ItemUnits = new List<ItemUnit>(),
-                UnitId = defaultUnit?.Id ?? 0
+                UnitId = defaultUnit?.Id ?? 0,
+                CurrentStock = 0,
+                Rate = 0,
+                PurchaseRate = 0,
+                WholesaleRate = 0,
+                IsMultiUnit = false,
+                HSNCode = null,
+                GstPercent = 0,
+                IsGSTApplicable = true,
+                TaxType = "GST"
             };
 
             var settings = await AppSettingsService.GetSettingsAsync();
@@ -335,10 +438,15 @@
             ItemCode = item.ItemCode,
             Barcode = item.Barcode,
             UnitId = item.UnitId,
+            BaseUnit = item.BaseUnit,
             CategoryId = item.CategoryId, 
             Rate = item.Rate,
             PurchaseRate = item.PurchaseRate,
             WholesaleRate = item.WholesaleRate,
+            HSNCode = item.HSNCode,
+            IsGSTApplicable = item.IsGSTApplicable,
+            TaxType = item.TaxType,
+            GstPercent = item.GstPercent,
             IsMultiUnit = item.IsMultiUnit,
             IsActive = item.IsActive,
             CurrentStock = item.CurrentStock,
@@ -346,13 +454,12 @@
             { 
                 Id = iu.Id, 
                 ItemId = iu.ItemId, 
-                UnitId = iu.UnitId, 
-                Barcode = iu.Barcode, 
+                UnitId = iu.UnitId,
+                Unit = iu.Unit, 
                 Rate = iu.Rate, 
                 PurchaseRate = iu.PurchaseRate,
-                QtyPerBaseUnit = iu.QtyPerBaseUnit,
-                Name = iu.Name,
-                ItemUnitCode = iu.ItemUnitCode
+                WholesaleRate = iu.WholesaleRate,
+                QtyPerBaseUnit = iu.QtyPerBaseUnit
             }).ToList() ?? new List<ItemUnit>()
         };
         
@@ -378,6 +485,30 @@
         
         try
         {
+            // FINAL SYNC BEFORE SAVE: Ensure Base Unit Row rules are strictly enforced
+            if (currentItem.IsMultiUnit)
+            {
+                if (currentItem.ItemUnits == null) currentItem.ItemUnits = new List<ItemUnit>();
+                var baseRow = currentItem.ItemUnits.FirstOrDefault(u => u.UnitId == currentItem.UnitId);
+                if (baseRow == null && currentItem.ItemUnits.Any()) 
+                {
+                    baseRow = currentItem.ItemUnits.First();
+                    baseRow.UnitId = currentItem.UnitId;
+                }
+                else if (baseRow == null)
+                {
+                    baseRow = new ItemUnit { UnitId = currentItem.UnitId };
+                    var lst = currentItem.ItemUnits.ToList();
+                    lst.Insert(0, baseRow);
+                    currentItem.ItemUnits = lst;
+                }
+
+                baseRow.QtyPerBaseUnit = 1;
+                baseRow.Rate = currentItem.Rate;
+                baseRow.PurchaseRate = currentItem.PurchaseRate;
+                baseRow.WholesaleRate = currentItem.WholesaleRate;
+            }
+
             if (currentItem.Id == 0)
             {
                 await ItemService.AddItemAsync(currentItem);
@@ -437,19 +568,96 @@
         }
     }
 
-    // Multi-Unit Logic (Same as before)
+    // Multi-Unit Logic
+    private void OnIsMultiUnitChanged(bool value)
+    {
+        currentItem.IsMultiUnit = value;
+        if (value)
+        {
+            EnsureBaseUnitRow();
+        }
+    }
+
+    private void EnsureBaseUnitRow()
+    {
+        if (currentItem.UnitId == 0) return;
+        if (currentItem.ItemUnits == null) currentItem.ItemUnits = new List<ItemUnit>();
+        
+        // Remove any existing row that claims to be a base unit row but isn't
+        var baseRows = currentItem.ItemUnits.Where(u => u.UnitId == currentItem.UnitId).ToList();
+        if (!baseRows.Any())
+        {
+            var baseUnit = new ItemUnit
+            {
+                ItemId = currentItem.Id,
+                UnitId = currentItem.UnitId,
+                QtyPerBaseUnit = 1,
+                Rate = currentItem.Rate,
+                PurchaseRate = currentItem.PurchaseRate,
+                WholesaleRate = currentItem.WholesaleRate
+            };
+            var list = currentItem.ItemUnits.ToList();
+            list.Insert(0, baseUnit);
+            currentItem.ItemUnits = list;
+        }
+        else
+        {
+            // Sync values to existing base row
+            var baseRow = baseRows.First();
+            baseRow.QtyPerBaseUnit = 1;
+            baseRow.Rate = currentItem.Rate;
+            baseRow.PurchaseRate = currentItem.PurchaseRate;
+            baseRow.WholesaleRate = currentItem.WholesaleRate;
+            
+            // Ensure it's at index 0 (UX preference)
+            var list = currentItem.ItemUnits.ToList();
+            list.Remove(baseRow);
+            list.Insert(0, baseRow);
+            currentItem.ItemUnits = list;
+        }
+    }
+
     private void AddUnitRow()
     {
         if (currentItem.ItemUnits == null) currentItem.ItemUnits = new List<ItemUnit>();
-        currentItem.ItemUnits.Add(new ItemUnit 
-        { 
+        
+        // Find first unit not yet used
+        var usedUnitIds = currentItem.ItemUnits.Select(iu => iu.UnitId).ToHashSet();
+        var nextUnit = Units.FirstOrDefault(u => u.IsActive && !usedUnitIds.Contains(u.Id));
+        
+        if (nextUnit == null)
+        {
+            Snackbar.Add("All available units have already been added.", Severity.Warning);
+            return;
+        }
+        
+        currentItem.ItemUnits.Add(new ItemUnit
+        {
             ItemId = currentItem.Id,
-            UnitId = currentItem.UnitId // Default to Base Unit
+            UnitId = nextUnit.Id,
+            QtyPerBaseUnit = 1
         });
+    }
+
+    private void OnItemUnitChanged(ItemUnit row, int newUnitId)
+    {
+        // Prevent duplicate
+        if (currentItem.ItemUnits.Any(iu => iu != row && iu.UnitId == newUnitId))
+        {
+            Snackbar.Add("This unit is already added. Each unit can only appear once.", Severity.Warning);
+            return;
+        }
+        row.UnitId = newUnitId;
     }
 
     private void RemoveUnitRow(ItemUnit unit)
     {
+        // Prevent removing base unit row (first row)
+        if (currentItem.ItemUnits.ToList().IndexOf(unit) == 0 && unit.UnitId == currentItem.UnitId)
+        {
+            Snackbar.Add("The base unit row cannot be removed.", Severity.Warning);
+            return;
+        }
         currentItem.ItemUnits.Remove(unit);
     }
     
@@ -459,12 +667,10 @@
         elementBeforeEdit = new ItemUnit
         {
             UnitId = itemVal.UnitId,
-            Name = itemVal.Name,
-            ItemUnitCode = itemVal.ItemUnitCode,
-            Barcode = itemVal.Barcode,
             QtyPerBaseUnit = itemVal.QtyPerBaseUnit,
             Rate = itemVal.Rate,
-            PurchaseRate = itemVal.PurchaseRate
+            PurchaseRate = itemVal.PurchaseRate,
+            WholesaleRate = itemVal.WholesaleRate
         };
     }
 
@@ -473,11 +679,9 @@
         var item = (ItemUnit)element;
         var original = elementBeforeEdit;
         item.UnitId = original.UnitId;
-        item.Name = original.Name;
-        item.ItemUnitCode = original.ItemUnitCode;
-        item.Barcode = original.Barcode;
         item.QtyPerBaseUnit = original.QtyPerBaseUnit;
         item.Rate = original.Rate;
         item.PurchaseRate = original.PurchaseRate;
+        item.WholesaleRate = original.WholesaleRate;
     }
 }

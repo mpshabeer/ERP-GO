@@ -1,4 +1,6 @@
 @page "/sales-invoice"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using ERPGOAPPLICATION.Interfaces
 @using ERPGODomain.DTOs
 @using ERPGODomain.Entities
@@ -12,6 +14,8 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 @inject IDialogService DialogService
+@inject IInvoicePdfService InvoicePdfService
+@inject IJSRuntime JSRuntime
 
 <div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;">
 
@@ -82,9 +86,10 @@
                             <MudCardContent Class="py-2 px-4">
                                 <MudGrid Spacing="2" Class="align-center">
                                     <MudItem xs="12" md="3">
-                                        <MudTextField Value="@tempItemName" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                        <MudTextField @ref="_itemSearchField" Value="@tempItemName" Label="Item" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
                                                       Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
-                                                      OnAdornmentClick="OpenItemSearch" Placeholder="Click 🔍 to search..." />
+                                                      OnAdornmentClick="OpenItemSearch" Placeholder="Click 🔍 to search..." 
+                                                      OnKeyDown="OnItemSearchKeyDown" />
                                     </MudItem>
                                     <MudItem xs="6" md="2">
                                         <MudSelect T="int?" Label="Unit" Value="@selectedUnitValue" ValueChanged="@OnUnitChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
@@ -95,16 +100,20 @@
                                         </MudSelect>
                                     </MudItem>
                                     <MudItem xs="6" md="1">
-                                        <MudNumericField @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                        <MudNumericField @ref="_qtyField" @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense"
                                                          HideSpinButtons="true" Min="0" TextChanged="CalculateAmount" OnKeyDown="OnQtyKeyDown" />
+                                    </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @bind-Value="tempQtyPerBase" Label="Qty/Base" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" />
                                     </MudItem>
                                     <MudItem xs="6" md="2">
                                         <MudNumericField @ref="_rateField" @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense"
                                                          HideSpinButtons="true" Min="0" Format="N2" TextChanged="CalculateAmount" OnKeyDown="OnRateKeyDown" />
                                     </MudItem>
                                     <MudItem xs="6" md="1">
-                                        <MudNumericField @bind-Value="tempDiscPercent" Label="Disc %" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                         HideSpinButtons="true" Min="0" Max="100" TextChanged="@(() => OnDiscPercentChanged(tempDiscPercent))" />
+                                        <MudNumericField @ref="_discField" @bind-Value="tempDiscPercent" Label="Disc %" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" Max="100" TextChanged="@(() => OnDiscPercentChanged(tempDiscPercent))" OnKeyDown="OnDiscKeyDown" />
                                     </MudItem>
                                     <MudItem xs="6" md="2">
                                         <MudTextField Value="@tempAmount" Label="Net Amount" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Format="N2" />
@@ -153,6 +162,7 @@
                                 <MudTh Style="width: 40%;">Item</MudTh>
                                 <MudTh>Unit</MudTh>
                                 <MudTh Style="text-align:right;">Qty</MudTh>
+                                <MudTh Style="text-align:right;">Qty/Base</MudTh>
                                 <MudTh Style="text-align:right;">Rate</MudTh>
                                 <MudTh Style="text-align:right;">Disc %</MudTh>
                                 <MudTh Style="text-align:right;">Amount</MudTh>
@@ -178,8 +188,9 @@
                                         </div>
                                     </div>
                                 </MudTd>
-                                <MudTd DataLabel="Unit" Style="@rowBg">@((context.ItemUnit != null && !string.IsNullOrWhiteSpace(context.ItemUnit.Name)) ? context.ItemUnit.Name : context.Unit?.Name)</MudTd>
+                                <MudTd DataLabel="Unit" Style="@rowBg">@((context.ItemUnit?.Unit != null) ? context.ItemUnit.Unit.Name : context.Unit?.Name)</MudTd>
                                 <MudTd DataLabel="Qty" Style="@($"text-align:right; {rowBg}")">@context.Qty.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Qty/Base" Style="@($"text-align:right; {rowBg}")">@context.QtyPerBaseUnit.ToString("N2")</MudTd>
                                 <MudTd DataLabel="Rate" Style="@($"text-align:right; {rowBg}")">@context.Rate.ToString("N2")</MudTd>
                                 <MudTd DataLabel="Disc %" Style="@($"text-align:right; {rowBg}")">@context.DiscountPercent.ToString("0.##")%</MudTd>
                                 <MudTd DataLabel="Amount" Style="@($"text-align:right; {rowBg}")"><b>@context.Amount.ToString("N2")</b></MudTd>
@@ -383,10 +394,20 @@
                                 <MudTd>@context.Date.ToString("dd-MMM-yyyy")</MudTd>
                                 <MudTd>@context.Customer?.Name</MudTd>
                                 <MudTd Style="text-align:right; font-weight: bold; color: #1976d2;">@context.TotalAmount.ToString("N2")</MudTd>
-                                <MudTd Style="text-align:center;">
-                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit"
-                                               OnClick="@(() => LoadInvoiceForEdit(context))">Edit</MudButton>
-                                </MudTd>
+                                 <MudTd Style="text-align:center;">
+                                    <MudTooltip Text="Edit Invoice">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small"
+                                                       OnClick="@(() => LoadInvoiceForEdit(context))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Preview PDF">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small"
+                                                       OnClick="@(async () => await PreviewInvoicePdf(context))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Download PDF">
+                                        <MudIconButton Icon="@Icons.Material.Filled.PictureAsPdf" Color="Color.Error" Size="Size.Small"
+                                                       OnClick="@(async () => await DownloadInvoicePdf(context))" />
+                                    </MudTooltip>
+                                 </MudTd>
                             </RowTemplate>
                             <PagerContent>
                                 <MudTablePager />
@@ -432,12 +453,17 @@
     private int? selectedUnitValue;
     private List<UnitDisplay> tempUnits = new List<UnitDisplay>();
     private decimal tempQty = 0;
+    private decimal tempQtyPerBase = 1;
     private decimal tempRate = 0;
     private decimal tempDiscPercent = 0;
     private decimal tempDiscAmount = 0;
     private decimal tempAmount = 0;
 
+    private MudTextField<string> _itemSearchField;
+    private MudNumericField<decimal> _qtyField;
     private MudNumericField<decimal> _rateField;
+    private MudNumericField<decimal> _discField;
+    private MudButton _addButton;
 
     public class UnitDisplay
     {
@@ -446,6 +472,7 @@
         public string DisplayName { get; set; }
         public decimal Multiplier { get; set; }
         public int? ItemUnitId { get; set; }
+        public decimal UnitRate { get; set; }
     }
 
     // ────────── LIST STATE ──────────
@@ -566,7 +593,58 @@
         }
     }
 
+    // ────────── PDF PREVIEW & DOWNLOAD ──────────
+
+    private bool _isPdfLoading = false;
+
+    private async Task PreviewInvoicePdf(InvoiceEntity inv)
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await InvoicePdfService.GenerateSalesInvoicePdfAsync(inv.Id);
+            var parameters = new DialogParameters { ["PdfBytes"] = bytes };
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            DialogService.Show<Dialogs.PdfPreviewDialog>($"Preview Invoice - {inv.InvoiceNo}", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
+    private async Task DownloadInvoicePdf(InvoiceEntity inv)
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        Snackbar.Add($"Generating PDF for {inv.InvoiceNo}…", Severity.Info);
+        try
+        {
+            var bytes = await InvoicePdfService.GenerateSalesInvoicePdfAsync(inv.Id);
+            await JSRuntime.InvokeVoidAsync(
+                "downloadFileFromBytes",
+                $"Invoice_{inv.InvoiceNo}.pdf",
+                "application/pdf",
+                bytes);
+            Snackbar.Add("PDF downloaded!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating PDF: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
     // ────────── LOAD FOR EDIT LOGIC ──────────
+
 
     private async Task LoadInvoiceForEdit(InvoiceEntity selectedInvoice)
     {
@@ -629,6 +707,7 @@
                         DiscountPercent = item.DiscountPercent,
                         DiscountAmount = item.DiscountAmount,
                         Amount = item.Amount,
+                        QtyPerBaseUnit = item.QtyPerBaseUnit,
                         QtyInBaseUnit = item.QtyInBaseUnit
                     });
                 }
@@ -667,7 +746,17 @@
         var dialog = DialogService.Show<ItemSearchDialog>("Search Item", options);
         var result = await dialog.Result;
         if (!result.Canceled && result.Data is Item item)
+        {
             await OnItemSelected(item);
+            if (_qtyField != null)
+                await Task.Delay(50); // slight delay to ensure UI updates
+                await _qtyField.FocusAsync();
+        }
+        else
+        {
+            if (_itemSearchField != null)
+                await _itemSearchField.FocusAsync();
+        }
     }
 
     private async Task OnItemSelected(Item item)
@@ -675,20 +764,22 @@
         tempItem = item;
         tempItemName = $"{item.ItemCode} - {item.Name}";
         tempQty = 1;
+        tempQtyPerBase = 1;
         tempRate = item.Rate;
         tempDiscPercent = 0;
         tempDiscAmount = 0;
 
         tempUnits.Clear();
         if (item.BaseUnit != null)
-            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null });
+            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null, UnitRate = item.Rate });
 
         if (item.ItemUnits != null)
         {
             foreach (var iu in item.ItemUnits)
             {
-                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
-                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+                var name = iu.Unit?.Name ?? "Unit";
+                decimal explicitRate = iu.Rate > 0 ? iu.Rate : (item.Rate * iu.QtyPerBaseUnit);
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id, UnitRate = explicitRate });
             }
         }
 
@@ -707,7 +798,10 @@
         if (tempItem == null || value == null) return;
         var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == value);
         if (selectedUnit != null)
-            tempRate = tempItem.Rate * selectedUnit.Multiplier;
+        {
+            tempQtyPerBase = selectedUnit.Multiplier;
+            tempRate = selectedUnit.UnitRate;
+        }
         CalculateAmount();
     }
 
@@ -735,24 +829,36 @@
 
     private void RecalculateTotals(decimal value) => RecalculateTotals();
 
+    private async Task OnItemSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            await OpenItemSearch();
+    }
+
     private async Task OnQtyKeyDown(KeyboardEventArgs args)
     {
         if (args.Key == "Enter" || args.Key == "NumpadEnter")
             if (_rateField != null) await _rateField.FocusAsync();
     }
 
-    private void OnRateKeyDown(KeyboardEventArgs args)
+    private async Task OnRateKeyDown(KeyboardEventArgs args)
     {
         if (args.Key == "Enter" || args.Key == "NumpadEnter")
-            AddLine();
+            if (_discField != null) await _discField.FocusAsync();
     }
 
-    private void AddLine()
+    private async Task OnDiscKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" || args.Key == "NumpadEnter")
+            await AddLine();
+    }
+
+    private async Task AddLine()
     {
         if (tempItem == null || selectedUnitValue == null || tempQty <= 0) return;
 
         var selectedUnit = tempUnits.First(u => u.Value == selectedUnitValue);
-        decimal qtyInBase = tempQty * selectedUnit.Multiplier;
+        decimal qtyInBase = tempQty * tempQtyPerBase;
 
         invoice.SalesInvoiceItems.Add(new InvoiceItemEntity
         {
@@ -767,6 +873,7 @@
             DiscountPercent = tempDiscPercent,
             DiscountAmount = tempDiscAmount,
             Amount = tempAmount,
+            QtyPerBaseUnit = tempQtyPerBase,
             QtyInBaseUnit = qtyInBase
         });
 
@@ -774,8 +881,14 @@
 
         // Reset
         tempItem = null; tempItemName = ""; selectedUnitValue = null;
-        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempUnits.Clear(); tempQty = 0; tempQtyPerBase = 1; tempRate = 0;
         tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
+
+        if (_itemSearchField != null)
+        {
+            await Task.Delay(50);
+            await _itemSearchField.FocusAsync();
+        }
     }
 
     private void RemoveLine(InvoiceItemEntity item)
@@ -792,6 +905,7 @@
         tempItem = item.Item;
         tempItemName = item.Item != null ? $"{item.Item.ItemCode} - {item.Item.Name}" : "";
         tempQty = item.Qty;
+        tempQtyPerBase = item.QtyPerBaseUnit > 0 ? item.QtyPerBaseUnit : 1;
         tempRate = item.Rate;
         tempDiscPercent = item.DiscountPercent;
         tempDiscAmount = item.DiscountAmount;
@@ -806,15 +920,17 @@
                 UnitId = item.Item.UnitId,
                 DisplayName = item.Item.BaseUnit.Name,
                 Multiplier = 1,
-                ItemUnitId = null
+                ItemUnitId = null,
+                UnitRate = item.Item.Rate
             });
 
         if (item.Item?.ItemUnits != null)
         {
             foreach (var iu in item.Item.ItemUnits)
             {
-                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
-                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+                var name = iu.Unit?.Name ?? "Unit";
+                decimal explicitRate = iu.Rate > 0 ? iu.Rate : (item.Item.Rate * iu.QtyPerBaseUnit);
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id, UnitRate = explicitRate });
             }
         }
 
@@ -861,6 +977,7 @@
         _editingItem.DiscountPercent = tempDiscPercent;
         _editingItem.DiscountAmount = tempDiscAmount;
         _editingItem.Amount = tempAmount;
+        _editingItem.QtyPerBaseUnit = tempQtyPerBase;
         _editingItem.QtyInBaseUnit = qtyInBase;
 
         RecalculateTotals();
@@ -871,7 +988,7 @@
     {
         _editingItem = null;
         tempItem = null; tempItemName = ""; selectedUnitValue = null;
-        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempUnits.Clear(); tempQty = 0; tempQtyPerBase = 1; tempRate = 0;
         tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
         StateHasChanged();
     }
@@ -929,9 +1046,24 @@
                 Snackbar.Add("✅ Invoice updated successfully!", Severity.Success);
             }
 
-            // Reload list and reset
+            int savedInvoiceId = invoice.Id;
+            var savedInvoiceNo = invoice.InvoiceNo;
+
+            // Prompt to print/preview
+            bool? wantToPrint = await DialogService.ShowMessageBox(
+                "Print Invoice",
+                $"Invoice '{savedInvoiceNo}' saved successfully. Would you like to preview/print it now?",
+                yesText: "Yes, Print", cancelText: "No");
+
+            // Reload list and reset UI state first
             await InitializeNewInvoiceAsync();
             await LoadList(); // Refresh history
+
+            if (wantToPrint == true && savedInvoiceId > 0)
+            {
+                // Trigger preview using a dummy entity with just the ID and No (PreviewInvoicePdf only needs these)
+                await PreviewInvoicePdf(new InvoiceEntity { Id = savedInvoiceId, InvoiceNo = savedInvoiceNo });
+            }
         }
         catch (Exception ex)
         {

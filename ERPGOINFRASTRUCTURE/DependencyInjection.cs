@@ -23,6 +23,10 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
+        services.AddScoped<IAccountingService, AccountingService>();
+        services.AddScoped<IVoucherService, VoucherService>();
+        services.AddScoped<IGstSalesInvoiceService, GstSalesInvoiceService>();
+        services.AddScoped<IGstCreditNoteService, GstCreditNoteService>();
         
         return services;
     }

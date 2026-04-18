@@ -20,4 +20,7 @@ public interface IUnitApiClient
 
     [Delete("/api/units/{id}")]
     Task DeleteUnitAsync(int id);
+
+    [Get("/api/units/all")]
+    Task<List<Unit>> GetAllUnitsIncludeInactiveAsync();
 }

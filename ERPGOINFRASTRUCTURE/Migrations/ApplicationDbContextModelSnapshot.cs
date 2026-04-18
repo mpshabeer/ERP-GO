@@ -22,6 +22,129 @@ namespace ERPGOInfrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("ERPGODomain.Entities.Account", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccountHeadId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("OpeningBalance")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountHeadId");
+
+                    b.ToTable("Accounts");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.AccountGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AccountGroups");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.AccountHead", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccountGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountGroupId");
+
+                    b.ToTable("AccountHeads");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.AppSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("AppSettings");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Category", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("DefaultUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefaultUnitId");
+
+                    b.ToTable("Categories");
+                });
+
             modelBuilder.Entity("ERPGODomain.Entities.Customer", b =>
                 {
                     b.Property<int>("Id")
@@ -29,6 +152,9 @@ namespace ERPGOInfrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AccountId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Address")
                         .IsRequired()
@@ -47,7 +173,7 @@ namespace ERPGOInfrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("CreditLimit")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -70,7 +196,281 @@ namespace ERPGOInfrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AccountId");
+
                     b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Expense", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("CashBankAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExpenseAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExpenseNo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Narration")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CashBankAccountId");
+
+                    b.HasIndex("ExpenseAccountId");
+
+                    b.ToTable("Expenses");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstCreditNote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CreditNoteNo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("OriginalInvoiceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("TotalGstAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("OriginalInvoiceId");
+
+                    b.ToTable("GstCreditNotes");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstCreditNoteItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("GstAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("GstCreditNoteId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("GstPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<string>("HSNCode")
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OriginalInvoiceItemId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Qty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("UnitId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GstCreditNoteId");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("UnitId");
+
+                    b.ToTable("GstCreditNoteItems");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstSalesInvoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("InvoiceNo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PaymentTerms")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("PostedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PostedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<string>("SupplyType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("TotalGstAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.ToTable("GstSalesInvoices");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstSalesInvoiceItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("GstAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("GstPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("GstSalesInvoiceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("HSNCode")
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ItemUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Qty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("QtyInBaseUnit")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("QtyPerBaseUnit")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("UnitId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GstSalesInvoiceId");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("ItemUnitId");
+
+                    b.HasIndex("UnitId");
+
+                    b.ToTable("GstSalesInvoiceItems");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.Item", b =>
@@ -85,10 +485,22 @@ namespace ERPGOInfrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("CategoryId")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("CurrentStock")
-                        .HasColumnType("decimal(18,3)");
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("GstPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<string>("HSNCode")
+                        .HasColumnType("varchar(8)");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsGSTApplicable")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsMultiUnit")
@@ -103,22 +515,67 @@ namespace ERPGOInfrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("PurchaseRate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<decimal>("Rate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<string>("TaxType")
+                        .IsRequired()
+                        .HasColumnType("varchar(20)");
 
                     b.Property<int>("UnitId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("WholesaleRate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
 
                     b.HasIndex("UnitId");
 
                     b.ToTable("Items");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.ItemOpeningStock", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ItemUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Qty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("TotalValue")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("ItemUnitId");
+
+                    b.ToTable("ItemOpeningStocks");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.ItemUnit", b =>
@@ -129,35 +586,23 @@ namespace ERPGOInfrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Barcode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("ItemId")
                         .HasColumnType("int");
 
-                    b.Property<string>("ItemUnitCode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<decimal>("PurchaseRate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<decimal>("QtyPerBaseUnit")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<decimal>("Rate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<int>("UnitId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("WholesaleRate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.HasKey("Id");
 
@@ -166,6 +611,149 @@ namespace ERPGOInfrastructure.Migrations
                     b.HasIndex("UnitId");
 
                     b.ToTable("ItemUnits");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.JournalEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Narration")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("ReferenceId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("VoucherDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VoucherNo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("VoucherType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("JournalEntries");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.JournalEntryLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Credit")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("Debit")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("JournalEntryId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("JournalEntryId");
+
+                    b.ToTable("JournalEntryLines");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.OpeningStockHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ItemUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Qty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId");
+
+                    b.ToTable("OpeningStockHistories");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Payment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("CashBankAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Narration")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("PartyAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PaymentNo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CashBankAccountId");
+
+                    b.HasIndex("PartyAccountId");
+
+                    b.ToTable("Payments");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.Purchase", b =>
@@ -179,6 +767,15 @@ namespace ERPGOInfrastructure.Migrations
                     b.Property<DateTime>("Date")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("InvoiceNo")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -187,11 +784,26 @@ namespace ERPGOInfrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PaymentTerms")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PurchaseNo")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18, 2)");
+
                     b.Property<int>("SupplierId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("TaxAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("TaxPercent")
+                        .HasColumnType("decimal(18, 2)");
+
                     b.Property<decimal>("TotalAmount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.HasKey("Id");
 
@@ -209,22 +821,34 @@ namespace ERPGOInfrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ItemUnitId")
                         .HasColumnType("int");
 
                     b.Property<int>("PurchaseId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("Qty")
-                        .HasColumnType("decimal(18,3)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<decimal>("QtyInBaseUnit")
-                        .HasColumnType("decimal(18,3)");
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("QtyPerBaseUnit")
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<decimal>("Rate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<int>("UnitId")
                         .HasColumnType("int");
@@ -233,11 +857,50 @@ namespace ERPGOInfrastructure.Migrations
 
                     b.HasIndex("ItemId");
 
+                    b.HasIndex("ItemUnitId");
+
                     b.HasIndex("PurchaseId");
 
                     b.HasIndex("UnitId");
 
                     b.ToTable("PurchaseItems");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Receipt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("CashBankAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Narration")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("PartyAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReceiptNo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CashBankAccountId");
+
+                    b.HasIndex("PartyAccountId");
+
+                    b.ToTable("Receipts");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.SalesInvoice", b =>
@@ -254,6 +917,15 @@ namespace ERPGOInfrastructure.Migrations
                     b.Property<DateTime>("Date")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("InvoiceNo")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -262,8 +934,21 @@ namespace ERPGOInfrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PaymentTerms")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("TaxAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("TaxPercent")
+                        .HasColumnType("decimal(18, 2)");
+
                     b.Property<decimal>("TotalAmount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.HasKey("Id");
 
@@ -281,19 +966,31 @@ namespace ERPGOInfrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<int>("ItemId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("ItemUnitId")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("Qty")
-                        .HasColumnType("decimal(18,3)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<decimal>("QtyInBaseUnit")
-                        .HasColumnType("decimal(18,3)");
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("QtyPerBaseUnit")
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<decimal>("Rate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<int>("SalesInvoiceId")
                         .HasColumnType("int");
@@ -305,11 +1002,89 @@ namespace ERPGOInfrastructure.Migrations
 
                     b.HasIndex("ItemId");
 
+                    b.HasIndex("ItemUnitId");
+
                     b.HasIndex("SalesInvoiceId");
 
                     b.HasIndex("UnitId");
 
                     b.ToTable("SalesInvoiceItems");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.StockAdjustmentDetail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AdjustedQty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("HeaderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ItemUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("NewQty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("SystemQty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HeaderId");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("ItemUnitId");
+
+                    b.ToTable("StockAdjustmentDetails");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.StockAdjustmentHeader", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdjustedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("AdjustmentNo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("TotalQty")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("StockAdjustmentHeaders");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.StockLedger", b =>
@@ -326,12 +1101,18 @@ namespace ERPGOInfrastructure.Migrations
                     b.Property<int>("ItemId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("ItemUnitId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Notes")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("Qty")
-                        .HasColumnType("decimal(18,3)");
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<string>("RefId")
                         .IsRequired()
@@ -345,6 +1126,8 @@ namespace ERPGOInfrastructure.Migrations
 
                     b.HasIndex("ItemId");
 
+                    b.HasIndex("ItemUnitId");
+
                     b.ToTable("StockLedger");
                 });
 
@@ -355,6 +1138,9 @@ namespace ERPGOInfrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AccountId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Address")
                         .IsRequired()
@@ -397,6 +1183,8 @@ namespace ERPGOInfrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AccountId");
+
                     b.ToTable("Suppliers");
                 });
 
@@ -427,8 +1215,221 @@ namespace ERPGOInfrastructure.Migrations
                     b.ToTable("Units");
                 });
 
+            modelBuilder.Entity("ERPGODomain.Entities.User", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Users");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "admin@erpgo.com",
+                            FullName = "System Administrator",
+                            IsActive = true,
+                            PasswordHash = "$2a$11$nNfRid0iG4ZITKxcMOQsaODRQEekR4GIbQBsxciEChA8cHwliJVJy",
+                            Role = "Admin",
+                            Username = "admin"
+                        });
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Account", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.AccountHead", "AccountHead")
+                        .WithMany()
+                        .HasForeignKey("AccountHeadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AccountHead");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.AccountHead", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.AccountGroup", "AccountGroup")
+                        .WithMany()
+                        .HasForeignKey("AccountGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AccountGroup");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Category", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Unit", "DefaultUnit")
+                        .WithMany()
+                        .HasForeignKey("DefaultUnitId");
+
+                    b.Navigation("DefaultUnit");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Customer", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Expense", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Account", "CashBankAccount")
+                        .WithMany()
+                        .HasForeignKey("CashBankAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.Account", "ExpenseAccount")
+                        .WithMany()
+                        .HasForeignKey("ExpenseAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CashBankAccount");
+
+                    b.Navigation("ExpenseAccount");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstCreditNote", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.GstSalesInvoice", "OriginalInvoice")
+                        .WithMany("CreditNotes")
+                        .HasForeignKey("OriginalInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("OriginalInvoice");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstCreditNoteItem", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.GstCreditNote", "GstCreditNote")
+                        .WithMany("Items")
+                        .HasForeignKey("GstCreditNoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.Unit", "Unit")
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("GstCreditNote");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstSalesInvoice", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstSalesInvoiceItem", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.GstSalesInvoice", "GstSalesInvoice")
+                        .WithMany("GstSalesInvoiceItems")
+                        .HasForeignKey("GstSalesInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.ItemUnit", "ItemUnit")
+                        .WithMany()
+                        .HasForeignKey("ItemUnitId");
+
+                    b.HasOne("ERPGODomain.Entities.Unit", "Unit")
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("GstSalesInvoice");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("ItemUnit");
+
+                    b.Navigation("Unit");
+                });
+
             modelBuilder.Entity("ERPGODomain.Entities.Item", b =>
                 {
+                    b.HasOne("ERPGODomain.Entities.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERPGODomain.Entities.Unit", "BaseUnit")
                         .WithMany()
                         .HasForeignKey("UnitId")
@@ -436,6 +1437,25 @@ namespace ERPGOInfrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("BaseUnit");
+
+                    b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.ItemOpeningStock", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.ItemUnit", "ItemUnit")
+                        .WithMany()
+                        .HasForeignKey("ItemUnitId");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("ItemUnit");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.ItemUnit", b =>
@@ -457,6 +1477,55 @@ namespace ERPGOInfrastructure.Migrations
                     b.Navigation("Unit");
                 });
 
+            modelBuilder.Entity("ERPGODomain.Entities.JournalEntryLine", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.JournalEntry", "JournalEntry")
+                        .WithMany("JournalEntryLines")
+                        .HasForeignKey("JournalEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("JournalEntry");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.OpeningStockHistory", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Item");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Payment", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Account", "CashBankAccount")
+                        .WithMany()
+                        .HasForeignKey("CashBankAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.Account", "PartyAccount")
+                        .WithMany()
+                        .HasForeignKey("PartyAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CashBankAccount");
+
+                    b.Navigation("PartyAccount");
+                });
+
             modelBuilder.Entity("ERPGODomain.Entities.Purchase", b =>
                 {
                     b.HasOne("ERPGODomain.Entities.Supplier", "Supplier")
@@ -476,6 +1545,10 @@ namespace ERPGOInfrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("ERPGODomain.Entities.ItemUnit", "ItemUnit")
+                        .WithMany()
+                        .HasForeignKey("ItemUnitId");
+
                     b.HasOne("ERPGODomain.Entities.Purchase", "Purchase")
                         .WithMany("PurchaseItems")
                         .HasForeignKey("PurchaseId")
@@ -490,9 +1563,30 @@ namespace ERPGOInfrastructure.Migrations
 
                     b.Navigation("Item");
 
+                    b.Navigation("ItemUnit");
+
                     b.Navigation("Purchase");
 
                     b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Receipt", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Account", "CashBankAccount")
+                        .WithMany()
+                        .HasForeignKey("CashBankAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.Account", "PartyAccount")
+                        .WithMany()
+                        .HasForeignKey("PartyAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CashBankAccount");
+
+                    b.Navigation("PartyAccount");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.SalesInvoice", b =>
@@ -514,6 +1608,10 @@ namespace ERPGOInfrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("ERPGODomain.Entities.ItemUnit", "ItemUnit")
+                        .WithMany()
+                        .HasForeignKey("ItemUnitId");
+
                     b.HasOne("ERPGODomain.Entities.SalesInvoice", "SalesInvoice")
                         .WithMany("SalesInvoiceItems")
                         .HasForeignKey("SalesInvoiceId")
@@ -528,9 +1626,36 @@ namespace ERPGOInfrastructure.Migrations
 
                     b.Navigation("Item");
 
+                    b.Navigation("ItemUnit");
+
                     b.Navigation("SalesInvoice");
 
                     b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.StockAdjustmentDetail", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.StockAdjustmentHeader", "Header")
+                        .WithMany("Details")
+                        .HasForeignKey("HeaderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERPGODomain.Entities.ItemUnit", "ItemUnit")
+                        .WithMany()
+                        .HasForeignKey("ItemUnitId");
+
+                    b.Navigation("Header");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("ItemUnit");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.StockLedger", b =>
@@ -541,12 +1666,45 @@ namespace ERPGOInfrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("ERPGODomain.Entities.ItemUnit", "ItemUnit")
+                        .WithMany()
+                        .HasForeignKey("ItemUnitId");
+
                     b.Navigation("Item");
+
+                    b.Navigation("ItemUnit");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.Supplier", b =>
+                {
+                    b.HasOne("ERPGODomain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstCreditNote", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.GstSalesInvoice", b =>
+                {
+                    b.Navigation("CreditNotes");
+
+                    b.Navigation("GstSalesInvoiceItems");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.Item", b =>
                 {
                     b.Navigation("ItemUnits");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.JournalEntry", b =>
+                {
+                    b.Navigation("JournalEntryLines");
                 });
 
             modelBuilder.Entity("ERPGODomain.Entities.Purchase", b =>
@@ -557,6 +1715,11 @@ namespace ERPGOInfrastructure.Migrations
             modelBuilder.Entity("ERPGODomain.Entities.SalesInvoice", b =>
                 {
                     b.Navigation("SalesInvoiceItems");
+                });
+
+            modelBuilder.Entity("ERPGODomain.Entities.StockAdjustmentHeader", b =>
+                {
+                    b.Navigation("Details");
                 });
 #pragma warning restore 612, 618
         }

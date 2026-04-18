@@ -1,4 +1,6 @@
 @page "/purchase-entry"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using ERPGOAPPLICATION.Interfaces
 @using ERPGODomain.DTOs
 @using ERPGODomain.Entities
@@ -10,6 +12,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 @inject IDialogService DialogService
+@inject IPurchasePdfService PurchasePdfService
 
 <div style="height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden;">
 
@@ -99,6 +102,10 @@
                                         <MudNumericField @bind-Value="tempQty" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense"
                                                          HideSpinButtons="true" Min="0" TextChanged="CalculateAmount" OnKeyDown="OnQtyKeyDown" />
                                     </MudItem>
+                                    <MudItem xs="6" md="1">
+                                        <MudNumericField @bind-Value="tempQtyPerBase" Label="Qty/Base" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         HideSpinButtons="true" Min="0" />
+                                    </MudItem>
                                     <MudItem xs="6" md="2">
                                         <MudNumericField @ref="_rateField" @bind-Value="tempRate" Label="Rate" Variant="Variant.Outlined" Margin="Margin.Dense"
                                                          HideSpinButtons="true" Min="0" Format="N2" TextChanged="CalculateAmount" OnKeyDown="OnRateKeyDown" />
@@ -154,6 +161,7 @@
                                 <MudTh Style="width: 40%;">Item</MudTh>
                                 <MudTh>Unit</MudTh>
                                 <MudTh Style="text-align:right;">Qty</MudTh>
+                                <MudTh Style="text-align:right;">Qty/Base</MudTh>
                                 <MudTh Style="text-align:right;">Rate</MudTh>
                                 <MudTh Style="text-align:right;">Disc %</MudTh>
                                 <MudTh Style="text-align:right;">Amount</MudTh>
@@ -179,8 +187,9 @@
                                         </div>
                                     </div>
                                 </MudTd>
-                                <MudTd DataLabel="Unit" Style="@rowBg">@((context.ItemUnit != null && !string.IsNullOrWhiteSpace(context.ItemUnit.Name)) ? context.ItemUnit.Name : context.Unit?.Name)</MudTd>
+                                <MudTd DataLabel="Unit" Style="@rowBg">@((context.ItemUnit?.Unit != null) ? context.ItemUnit.Unit.Name : context.Unit?.Name)</MudTd>
                                 <MudTd DataLabel="Qty" Style="@($"text-align:right; {rowBg}")">@context.Qty.ToString("N2")</MudTd>
+                                <MudTd DataLabel="Qty/Base" Style="@($"text-align:right; {rowBg}")">@context.QtyPerBaseUnit.ToString("N2")</MudTd>
                                 <MudTd DataLabel="Rate" Style="@($"text-align:right; {rowBg}")">@context.Rate.ToString("N2")</MudTd>
                                 <MudTd DataLabel="Disc %" Style="@($"text-align:right; {rowBg}")">@context.DiscountPercent.ToString("0.##")%</MudTd>
                                 <MudTd DataLabel="Amount" Style="@($"text-align:right; {rowBg}")"><b>@context.Amount.ToString("N2")</b></MudTd>
@@ -386,8 +395,18 @@
                                 <MudTd>@context.InvoiceNo</MudTd>
                                 <MudTd Style="text-align:right; font-weight: bold; color: #1976d2;">@context.TotalAmount.ToString("N2")</MudTd>
                                 <MudTd Style="text-align:center;">
-                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit"
-                                               OnClick="@(() => LoadPurchaseForEdit(context))">Edit</MudButton>
+                                    <MudTooltip Text="Edit Purchase">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small"
+                                                       OnClick="@(() => LoadPurchaseForEdit(context))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Preview PDF">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small"
+                                                       OnClick="@(async () => await PreviewPurchasePdf(context))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Download PDF">
+                                        <MudIconButton Icon="@Icons.Material.Filled.PictureAsPdf" Color="Color.Error" Size="Size.Small"
+                                                       OnClick="@(async () => await DownloadPurchasePdf(context))" />
+                                    </MudTooltip>
                                 </MudTd>
                             </RowTemplate>
                             <PagerContent>
@@ -436,6 +455,7 @@
     private int? selectedUnitValue;
     private List<UnitDisplay> tempUnits = new List<UnitDisplay>();
     private decimal tempQty = 0;
+    private decimal tempQtyPerBase = 1;
     private decimal tempRate = 0;
     private decimal tempDiscPercent = 0;
     private decimal tempDiscAmount = 0;
@@ -450,6 +470,7 @@
         public string DisplayName { get; set; }
         public decimal Multiplier { get; set; }
         public int? ItemUnitId { get; set; }
+        public decimal UnitRate { get; set; }
     }
 
     // ────────── LIST STATE ──────────
@@ -604,6 +625,7 @@
                         DiscountPercent = item.DiscountPercent,
                         DiscountAmount = item.DiscountAmount,
                         Amount = item.Amount,
+                        QtyPerBaseUnit = item.QtyPerBaseUnit,
                         QtyInBaseUnit = item.QtyInBaseUnit
                     });
                 }
@@ -648,20 +670,23 @@
         tempItem = item;
         tempItemName = $"{item.ItemCode} - {item.Name}";
         tempQty = 1;
+        tempQtyPerBase = 1;
         tempRate = item.PurchaseRate;
         tempDiscPercent = 0;
         tempDiscAmount = 0;
 
         tempUnits.Clear();
+
         if (item.BaseUnit != null)
-            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null });
+            tempUnits.Add(new UnitDisplay { Value = -item.UnitId, UnitId = item.UnitId, DisplayName = item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null, UnitRate = item.PurchaseRate });
 
         if (item.ItemUnits != null)
         {
             foreach (var iu in item.ItemUnits)
             {
-                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
-                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+                var name = iu.Unit?.Name ?? "Unit";
+                decimal explicitRate = iu.PurchaseRate > 0 ? iu.PurchaseRate : (item.PurchaseRate * iu.QtyPerBaseUnit);
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id, UnitRate = explicitRate });
             }
         }
 
@@ -681,15 +706,8 @@
         var selectedUnit = tempUnits.FirstOrDefault(u => u.Value == value);
         if (selectedUnit != null)
         {
-            // Optional: If we had different rates per unit, we'd pick them here.
-            // For now, assume Base Purchase Rate is scaled by multiplier? 
-            // Usually Purchase Rate is per Base Unit or per Purchase Unit. 
-            // If Item.PurchaseRate is per Base Unit, then we multiply.
-            // tempRate = tempItem.PurchaseRate * selectedUnit.Multiplier; 
-            // Existing logic didn't scale rate, but for Sales we did. 
-            // Let's assume PurchaseRate in Item Master is for Base Unit? 
-            // Usually yes.
-             tempRate = tempItem.PurchaseRate * selectedUnit.Multiplier;
+             tempQtyPerBase = selectedUnit.Multiplier;
+             tempRate = selectedUnit.UnitRate;
         }
         CalculateAmount();
     }
@@ -735,7 +753,7 @@
         if (tempItem == null || selectedUnitValue == null || tempQty <= 0) return;
 
         var selectedUnit = tempUnits.First(u => u.Value == selectedUnitValue);
-        decimal qtyInBase = tempQty * selectedUnit.Multiplier;
+        decimal qtyInBase = tempQty * tempQtyPerBase;
 
         purchase.PurchaseItems.Add(new PurchaseItem
         {
@@ -750,13 +768,14 @@
             DiscountPercent = tempDiscPercent,
             DiscountAmount = tempDiscAmount,
             Amount = tempAmount,
+            QtyPerBaseUnit = tempQtyPerBase,
             QtyInBaseUnit = qtyInBase
         });
 
         RecalculateTotals();
 
         tempItem = null; tempItemName = ""; selectedUnitValue = null;
-        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempUnits.Clear(); tempQty = 0; tempQtyPerBase = 1; tempRate = 0;
         tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
     }
 
@@ -773,6 +792,7 @@
         tempItem = item.Item;
         tempItemName = item.Item != null ? $"{item.Item.ItemCode} - {item.Item.Name}" : "";
         tempQty = item.Qty;
+        tempQtyPerBase = item.QtyPerBaseUnit > 0 ? item.QtyPerBaseUnit : 1;
         tempRate = item.Rate;
         tempDiscPercent = item.DiscountPercent;
         tempDiscAmount = item.DiscountAmount;
@@ -780,14 +800,15 @@
 
         tempUnits.Clear();
         if (item.Item?.BaseUnit != null)
-            tempUnits.Add(new UnitDisplay { Value = -item.Item.UnitId, UnitId = item.Item.UnitId, DisplayName = item.Item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null });
+            tempUnits.Add(new UnitDisplay { Value = -item.Item.UnitId, UnitId = item.Item.UnitId, DisplayName = item.Item.BaseUnit.Name, Multiplier = 1, ItemUnitId = null, UnitRate = item.Item.PurchaseRate });
 
         if (item.Item?.ItemUnits != null)
         {
             foreach (var iu in item.Item.ItemUnits)
             {
-                var name = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
-                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
+                var name = iu.Unit?.Name ?? "Unit";
+                decimal explicitRate = iu.PurchaseRate > 0 ? iu.PurchaseRate : (item.Item.PurchaseRate * iu.QtyPerBaseUnit);
+                tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = name, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id, UnitRate = explicitRate });
             }
         }
 
@@ -827,6 +848,7 @@
         _editingItem.DiscountPercent = tempDiscPercent;
         _editingItem.DiscountAmount = tempDiscAmount;
         _editingItem.Amount = tempAmount;
+        _editingItem.QtyPerBaseUnit = tempQtyPerBase;
         _editingItem.QtyInBaseUnit = qtyInBase;
 
         RecalculateTotals();
@@ -837,7 +859,7 @@
     {
         _editingItem = null;
         tempItem = null; tempItemName = ""; selectedUnitValue = null;
-        tempUnits.Clear(); tempQty = 0; tempRate = 0;
+        tempUnits.Clear(); tempQty = 0; tempQtyPerBase = 1; tempRate = 0;
         tempDiscPercent = 0; tempDiscAmount = 0; tempAmount = 0;
         StateHasChanged();
     }
@@ -893,8 +915,24 @@
                 Snackbar.Add("✅ Purchase updated successfully!", Severity.Success);
             }
 
+            int savedPurchaseId = purchase.Id;
+            var savedPurchaseNo = purchase.PurchaseNo;
+
+            // Prompt to print/preview
+            bool? wantToPrint = await DialogService.ShowMessageBox(
+                "Print Purchase Invoice",
+                $"Purchase '{savedPurchaseNo}' saved successfully. Would you like to preview/print it now?",
+                yesText: "Yes, Print", cancelText: "No");
+
+            // Reload list and reset UI state first
             await InitializeNewPurchaseAsync();
-            await LoadList();
+            await LoadList(); // Refresh history
+
+            if (wantToPrint == true && savedPurchaseId > 0)
+            {
+                // Trigger preview using a dummy entity with just the ID and No (PreviewInvoicePdf only needs these)
+                await PreviewPurchasePdf(new Purchase { Id = savedPurchaseId, PurchaseNo = savedPurchaseNo });
+            }
         }
         catch (Exception ex)
         {
@@ -903,6 +941,52 @@
         finally
         {
             _isProcessing = false;
+        }
+    }
+    // ────────── PDF PREVIEW & DOWNLOAD ──────────
+    
+    [Inject] IJSRuntime JSRuntime { get; set; } = null!;
+    
+    private bool _isPdfLoading = false;
+
+    private async Task PreviewPurchasePdf(Purchase pur)
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PurchasePdfService.GeneratePurchaseInvoicePdfAsync(pur.Id);
+            var parameters = new DialogParameters { ["PdfBytes"] = bytes };
+            var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+            DialogService.Show<Dialogs.PdfPreviewDialog>($"Preview Purchase - {pur.PurchaseNo}", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
+        }
+    }
+
+    private async Task DownloadPurchasePdf(Purchase pur)
+    {
+        if (_isPdfLoading) return;
+        _isPdfLoading = true;
+        try
+        {
+            var bytes = await PurchasePdfService.GeneratePurchaseInvoicePdfAsync(pur.Id);
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", $"Purchase_{pur.PurchaseNo}.pdf", "application/pdf", bytes);
+            // Snackbar.Add("PDF Downloaded", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading PDF: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isPdfLoading = false;
         }
     }
 }

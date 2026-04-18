@@ -29,4 +29,10 @@ public class Customer
     public decimal CreditLimit { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    // Link to Chart of Accounts (Sundry Debtors)
+    public int? AccountId { get; set; }
+    
+    [ForeignKey("AccountId")]
+    public Account? Account { get; set; }
 }

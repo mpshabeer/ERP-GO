@@ -86,7 +86,7 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd>@context.Item?.Name</MudTd>
-                            <MudTd>@(context.ItemUnit?.Name ?? context.Item?.BaseUnit?.Name)</MudTd>
+                            <MudTd>@(context.ItemUnit?.Unit?.Name ?? context.Item?.BaseUnit?.Name)</MudTd>
                             <MudTd>@context.SystemQty.ToString("N3")</MudTd>
                             <MudTd>@context.NewQty.ToString("N3")</MudTd>
                             <MudTd Style="@(context.AdjustedQty < 0 ? "color:red; font-weight:bold;" : "color:green; font-weight:bold;")">
@@ -210,8 +210,7 @@
              tempItem = fullItem;
              foreach (var iu in fullItem.ItemUnits)
              {
-                 // Use specific Packing Name (ItemUnit.Name) if available, otherwise fallback to Unit.Name
-                 var displayName = !string.IsNullOrWhiteSpace(iu.Name) ? iu.Name : (iu.Unit?.Name ?? "Unit");
+                 var displayName = iu.Unit?.Name ?? "Unit";
                  // Use ItemUnit.Id (Positive) as Value
                  tempUnits.Add(new UnitDisplay { Value = iu.Id, UnitId = iu.UnitId, DisplayName = displayName, Multiplier = iu.QtyPerBaseUnit, ItemUnitId = iu.Id });
              }

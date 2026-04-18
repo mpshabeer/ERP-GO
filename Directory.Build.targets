@@ -1,0 +1,6 @@
+<Project>
+  <Target Name="UnblockDlls" AfterTargets="Build">
+    <Exec Command="powershell -ExecutionPolicy Bypass -Command &quot;Get-ChildItem -Path '$(TargetDir)' -Filter '*.dll' | Unblock-File&quot;" />
+    <Exec Command="powershell -ExecutionPolicy Bypass -Command &quot;Get-ChildItem -Path '$(TargetDir)' -Filter '*.exe' | Unblock-File&quot;" />
+  </Target>
+</Project>

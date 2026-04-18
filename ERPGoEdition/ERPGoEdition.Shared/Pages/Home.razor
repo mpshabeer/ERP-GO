@@ -1,14 +1,756 @@
 ﻿@page "/"
-@using ERPGoEdition.Shared.Services
-@inject IFormFactor FormFactor
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using ERPGOAPPLICATION.Interfaces
+@using ERPGODomain.Entities
+@using ERPGODomain.DTOs
+@using SI = ERPGODomain.Entities.SalesInvoice
+@inject ISalesService SalesService
+@inject IPurchaseService PurchaseService
+@inject IItemService ItemService
+@inject IStockService StockService
+@inject ISnackbar Snackbar
 
-<PageTitle>Home</PageTitle>
+<PageTitle>ERP Go — Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="dashboard-wrapper">
 
-Welcome to your new app running on <em>@factor</em> using <em>@platform</em>.
+    <!-- ═══════════════════════════════════════════════════════
+         HEADER BAR
+         ═══════════════════════════════════════════════════════ -->
+    <div class="dash-header">
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight:700; color:#1565C0;">📊 Business Dashboard</MudText>
+            <MudText Typo="Typo.caption" Style="color:#78909C;">
+                @DateTime.Now.ToString("dddd, dd MMMM yyyy") &nbsp;|&nbsp; Real-time overview
+            </MudText>
+        </div>
+        <div class="d-flex gap-2 align-center">
+            <MudChip T="string" Icon="@Icons.Material.Filled.Circle" Color="Color.Success" Size="Size.Small" Style="font-size:0.7rem;">Live</MudChip>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadDashboardData" Disabled="_loading" Color="Color.Primary">
+                @(_loading ? "Loading..." : "Refresh")
+            </MudButton>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="dash-loader">
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Loading dashboard data...</MudText>
+        </div>
+    }
+
+    <!-- ═══════════════════════════════════════════════════════
+         KPI METRIC CARDS
+         ═══════════════════════════════════════════════════════ -->
+    <div class="kpi-grid">
+
+        <!-- Today's Sales -->
+        <div class="kpi-card kpi-sales">
+            <div class="kpi-icon-wrap">
+                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Style="font-size:2rem; color:white;" />
+            </div>
+            <div class="kpi-content">
+                <div class="kpi-label">Today's Sales</div>
+                <div class="kpi-value">@_todaySalesTotal.ToString("N2")</div>
+                <div class="kpi-sub">@_todaySalesCount invoice(s)</div>
+            </div>
+            <div class="kpi-bg-icon">₹</div>
+        </div>
+
+        <!-- Today's Purchases -->
+        <div class="kpi-card kpi-purchase">
+            <div class="kpi-icon-wrap">
+                <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Style="font-size:2rem; color:white;" />
+            </div>
+            <div class="kpi-content">
+                <div class="kpi-label">Today's Purchases</div>
+                <div class="kpi-value">@_todayPurchasesTotal.ToString("N2")</div>
+                <div class="kpi-sub">@_todayPurchasesCount order(s)</div>
+            </div>
+            <div class="kpi-bg-icon">🛒</div>
+        </div>
+
+        <!-- Monthly Sales -->
+        <div class="kpi-card kpi-monthly">
+            <div class="kpi-icon-wrap">
+                <MudIcon Icon="@Icons.Material.Filled.BarChart" Style="font-size:2rem; color:white;" />
+            </div>
+            <div class="kpi-content">
+                <div class="kpi-label">This Month — Sales</div>
+                <div class="kpi-value">@_monthSalesTotal.ToString("N2")</div>
+                <div class="kpi-sub">@_monthSalesCount invoices</div>
+            </div>
+            <div class="kpi-bg-icon">📈</div>
+        </div>
+
+        <!-- Monthly Purchases -->
+        <div class="kpi-card kpi-monthly-pur">
+            <div class="kpi-icon-wrap">
+                <MudIcon Icon="@Icons.Material.Filled.Inventory" Style="font-size:2rem; color:white;" />
+            </div>
+            <div class="kpi-content">
+                <div class="kpi-label">This Month — Purchases</div>
+                <div class="kpi-value">@_monthPurchasesTotal.ToString("N2")</div>
+                <div class="kpi-sub">@_monthPurchasesCount orders</div>
+            </div>
+            <div class="kpi-bg-icon">📦</div>
+        </div>
+
+        <!-- Total Items -->
+        <div class="kpi-card kpi-items">
+            <div class="kpi-icon-wrap">
+                <MudIcon Icon="@Icons.Material.Filled.Category" Style="font-size:2rem; color:white;" />
+            </div>
+            <div class="kpi-content">
+                <div class="kpi-label">Total Items</div>
+                <div class="kpi-value">@_totalItems</div>
+                <div class="kpi-sub">in item master</div>
+            </div>
+            <div class="kpi-bg-icon">🗂️</div>
+        </div>
+
+        <!-- Gross Profit -->
+        <div class="kpi-card @(_grossProfit >= 0 ? "kpi-profit" : "kpi-loss")">
+            <div class="kpi-icon-wrap">
+                <MudIcon Icon="@(_grossProfit >= 0 ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.ArrowDownward)" Style="font-size:2rem; color:white;" />
+            </div>
+            <div class="kpi-content">
+                <div class="kpi-label">Monthly Gross Profit</div>
+                <div class="kpi-value">@_grossProfit.ToString("N2")</div>
+                <div class="kpi-sub">Sales − Purchases</div>
+            </div>
+            <div class="kpi-bg-icon">💹</div>
+        </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         MAIN CONTENT GRID (2 columns)
+         ═══════════════════════════════════════════════════════ -->
+    <div class="dash-main-grid">
+
+        <!-- LEFT: Recent Sales -->
+        <MudCard Elevation="3" Class="dash-card">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Success" Size="Size.Medium">
+                        <MudIcon Icon="@Icons.Material.Filled.Receipt" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:700;">Recent Sales Invoices</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Last 5 transactions</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">@_recentSales.Count</MudChip>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudDivider />
+            <MudCardContent Class="pa-0">
+                @if (_recentSales.Any())
+                {
+                    <MudTable Items="@_recentSales" Hover="true" Dense="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Invoice No</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Customer</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Date</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; text-align:right; background:#fafafa;">Amount</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudText Typo="Typo.body2" Style="font-weight:600; color:#1565C0;">@context.InvoiceNo</MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.body2">@(context.Customer?.Name ?? "—")</MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Date.ToString("dd MMM yyyy")</MudText>
+                            </MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudText Typo="Typo.body2" Style="font-weight:700; color:#2e7d32;">@context.TotalAmount.ToString("N2")</MudText>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else if (!_loading)
+                {
+                    <div class="empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Color="Color.Tertiary" />
+                        <MudText Typo="Typo.body2" Color="Color.Tertiary">No sales invoices yet</MudText>
+                    </div>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        <!-- RIGHT: Recent Purchases -->
+        <MudCard Elevation="3" Class="dash-card">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Warning" Size="Size.Medium">
+                        <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:700;">Recent Purchase Orders</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Last 5 transactions</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">@_recentPurchases.Count</MudChip>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudDivider />
+            <MudCardContent Class="pa-0">
+                @if (_recentPurchases.Any())
+                {
+                    <MudTable Items="@_recentPurchases" Hover="true" Dense="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Purchase No</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Supplier</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Date</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; text-align:right; background:#fafafa;">Amount</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudText Typo="Typo.body2" Style="font-weight:600; color:#e65100;">@context.PurchaseNo</MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.body2">@(context.Supplier?.Name ?? "—")</MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Date.ToString("dd MMM yyyy")</MudText>
+                            </MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudText Typo="Typo.body2" Style="font-weight:700; color:#e65100;">@context.TotalAmount.ToString("N2")</MudText>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else if (!_loading)
+                {
+                    <div class="empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.ShoppingBag" Size="Size.Large" Color="Color.Tertiary" />
+                        <MudText Typo="Typo.body2" Color="Color.Tertiary">No purchase orders yet</MudText>
+                    </div>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        <!-- LEFT: Top Items by Stock Value -->
+        <MudCard Elevation="3" Class="dash-card">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Info" Size="Size.Medium">
+                        <MudIcon Icon="@Icons.Material.Filled.Inventory2" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:700;">Inventory Snapshot</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Items with opening stock value</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudDivider />
+            <MudCardContent Class="pa-0">
+                @if (_topStockItems.Any())
+                {
+                    <MudTable Items="@_topStockItems" Hover="true" Dense="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Item</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; text-align:right; background:#fafafa;">Qty</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; text-align:right; background:#fafafa;">Value</MudTh>
+                            <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; text-align:center; background:#fafafa;">Status</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <div>
+                                    <MudText Typo="Typo.body2" Style="font-weight:600;">@(context.Item?.Name ?? "—")</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Item?.ItemCode</MudText>
+                                </div>
+                            </MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudText Typo="Typo.body2">@context.Qty.ToString("N2")</MudText>
+                            </MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudText Typo="Typo.body2" Style="font-weight:600;">@context.TotalValue.ToString("N2")</MudText>
+                            </MudTd>
+                            <MudTd Style="text-align:center;">
+                                @if (context.Qty > 10)
+                                {
+                                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">In Stock</MudChip>
+                                }
+                                else if (context.Qty > 0)
+                                {
+                                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Text">Low</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Text">Out</MudChip>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else if (!_loading)
+                {
+                    <div class="empty-state">
+                        <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Large" Color="Color.Tertiary" />
+                        <MudText Typo="Typo.body2" Color="Color.Tertiary">No stock entries found</MudText>
+                    </div>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        <!-- RIGHT: Monthly Summary Mini-Cards -->
+        <div class="summary-panel">
+
+            <!-- Activity Summary -->
+            <MudCard Elevation="3" Class="mb-3">
+                <MudCardHeader>
+                    <CardHeaderAvatar>
+                        <MudAvatar Color="Color.Secondary" Size="Size.Medium">
+                            <MudIcon Icon="@Icons.Material.Filled.InsertChart" />
+                        </MudAvatar>
+                    </CardHeaderAvatar>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.subtitle1" Style="font-weight:700;">Monthly Summary</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@DateTime.Now.ToString("MMMM yyyy")</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudDivider />
+                <MudCardContent>
+                    <div class="summary-row">
+                        <div class="summary-label">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Color="Color.Success" />
+                            Total Sales Revenue
+                        </div>
+                        <div class="summary-value" style="color:#2e7d32;">@_monthSalesTotal.ToString("N2")</div>
+                    </div>
+                    <MudDivider Class="my-1" />
+                    <div class="summary-row">
+                        <div class="summary-label">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Color="Color.Error" />
+                            Total Purchase Cost
+                        </div>
+                        <div class="summary-value" style="color:#c62828;">@_monthPurchasesTotal.ToString("N2")</div>
+                    </div>
+                    <MudDivider Class="my-1" />
+                    <div class="summary-row">
+                        <div class="summary-label">
+                            <MudIcon Icon="@Icons.Material.Filled.Calculate" Size="Size.Small" Color="Color.Primary" />
+                            Gross Profit / Loss
+                        </div>
+                        <div class="summary-value" style="@(_grossProfit >= 0 ? "color:#2e7d32;" : "color:#c62828;") font-size:1rem; font-weight:800;">
+                            @(_grossProfit >= 0 ? "+" : "")@_grossProfit.ToString("N2")
+                        </div>
+                    </div>
+                    <MudDivider Class="my-1" />
+                    <div class="summary-row">
+                        <div class="summary-label">
+                            <MudIcon Icon="@Icons.Material.Filled.Receipt" Size="Size.Small" Color="Color.Info" />
+                            Sales Transactions
+                        </div>
+                        <div class="summary-value">@_monthSalesCount</div>
+                    </div>
+                    <MudDivider Class="my-1" />
+                    <div class="summary-row">
+                        <div class="summary-label">
+                            <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Small" Color="Color.Warning" />
+                            Purchase Transactions
+                        </div>
+                        <div class="summary-value">@_monthPurchasesCount</div>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+
+            <!-- Profit Meter -->
+            <MudCard Elevation="3">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2" Style="font-weight:700; margin-bottom:8px;">Profit Meter (Monthly)</MudText>
+                    @{
+                        var total = _monthSalesTotal + _monthPurchasesTotal;
+                        var salesPct = total > 0 ? (int)((_monthSalesTotal / total) * 100) : 0;
+                        var purPct = total > 0 ? (int)((_monthPurchasesTotal / total) * 100) : 0;
+                    }
+                    <div class="meter-label">
+                        <span style="color:#2e7d32;">■ Sales (@salesPct%)</span>
+                        <span style="color:#c62828;">■ Purchases (@purPct%)</span>
+                    </div>
+                    <div class="profit-bar">
+                        <div class="profit-bar-sales" style="width:@(salesPct)%;"></div>
+                        <div class="profit-bar-pur" style="width:@(purPct)%;"></div>
+                    </div>
+                    @if (_monthSalesTotal == 0 && _monthPurchasesTotal == 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Tertiary">No data for this month</MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         QUICK ACCESS SHORTCUTS
+         ═══════════════════════════════════════════════════════ -->
+    <MudText Typo="Typo.subtitle1" Style="font-weight:700; margin: 16px 0 8px; color:#37474F;">⚡ Quick Access</MudText>
+    <div class="quick-grid">
+        <div class="quick-item qi-sales" @onclick='() => OpenTab("Sales Invoice", typeof(SalesInvoice))'>
+            <MudIcon Icon="@Icons.Material.Filled.Receipt" Style="font-size:2rem;" />
+            <span>Sales Invoice</span>
+        </div>
+        <div class="quick-item qi-purchase" @onclick='() => OpenTab("Purchase Entry", typeof(PurchaseEntry))'>
+            <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Style="font-size:2rem;" />
+            <span>Purchase Entry</span>
+        </div>
+        <div class="quick-item qi-items" @onclick='() => OpenTab("Item Master", typeof(ItemMaster))'>
+            <MudIcon Icon="@Icons.Material.Filled.Inventory2" Style="font-size:2rem;" />
+            <span>Item Master</span>
+        </div>
+        <div class="quick-item qi-stock" @onclick='() => OpenTab("Stock Adjustment", typeof(StockAdjustmentEntry))'>
+            <MudIcon Icon="@Icons.Material.Filled.SwapVert" Style="font-size:2rem;" />
+            <span>Stock Adjust</span>
+        </div>
+        <div class="quick-item qi-opening" @onclick='() => OpenTab("Opening Stock", typeof(OpeningStockEntry))'>
+            <MudIcon Icon="@Icons.Material.Filled.AddBox" Style="font-size:2rem;" />
+            <span>Opening Stock</span>
+        </div>
+        <div class="quick-item qi-customer" @onclick='() => OpenTab("Customers", typeof(CustomerMaster))'>
+            <MudIcon Icon="@Icons.Material.Filled.People" Style="font-size:2rem;" />
+            <span>Customers</span>
+        </div>
+        <div class="quick-item qi-supplier" @onclick='() => OpenTab("Suppliers", typeof(SupplierMaster))'>
+            <MudIcon Icon="@Icons.Material.Filled.LocalShipping" Style="font-size:2rem;" />
+            <span>Suppliers</span>
+        </div>
+        <div class="quick-item qi-category" @onclick='() => OpenTab("Categories", typeof(CategoryMaster))'>
+            <MudIcon Icon="@Icons.Material.Filled.Category" Style="font-size:2rem;" />
+            <span>Categories</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     INLINE CSS
+     ═══════════════════════════════════════════════════════ -->
+<style>
+    .dashboard-wrapper {
+        padding: 12px 8px;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: #f0f4f8;
+        min-height: calc(100vh - 80px);
+    }
+
+    .dash-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        background: white;
+        border-radius: 12px;
+        padding: 12px 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+
+    .dash-loader {
+        text-align: center;
+        padding: 16px;
+    }
+
+    /* ─── KPI CARDS ─── */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .kpi-card {
+        position: relative;
+        border-radius: 14px;
+        padding: 18px 20px;
+        color: white;
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: default;
+    }
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .kpi-sales    { background: linear-gradient(135deg, #1565C0, #1E88E5); }
+    .kpi-purchase { background: linear-gradient(135deg, #E65100, #FF7043); }
+    .kpi-monthly  { background: linear-gradient(135deg, #2E7D32, #43A047); }
+    .kpi-monthly-pur { background: linear-gradient(135deg, #6A1B9A, #AB47BC); }
+    .kpi-items    { background: linear-gradient(135deg, #00695C, #26A69A); }
+    .kpi-profit   { background: linear-gradient(135deg, #1B5E20, #388E3C); }
+    .kpi-loss     { background: linear-gradient(135deg, #B71C1C, #E53935); }
+
+    .kpi-icon-wrap {
+        background: rgba(255,255,255,0.2);
+        border-radius: 12px;
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 52px;
+        min-height: 52px;
+    }
+    .kpi-content { flex: 1; z-index: 1; }
+    .kpi-label   { font-size: 0.72rem; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+    .kpi-value   { font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
+    .kpi-sub     { font-size: 0.72rem; opacity: 0.75; margin-top: 3px; }
+    .kpi-bg-icon {
+        position: absolute;
+        right: 12px;
+        bottom: -8px;
+        font-size: 4rem;
+        opacity: 0.12;
+        line-height: 1;
+        z-index: 0;
+    }
+
+    /* ─── MAIN 2-COLUMN GRID ─── */
+    .dash-main-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+    @@media (max-width: 900px) {
+        .dash-main-grid { grid-template-columns: 1fr; }
+    }
+
+    .dash-card {
+        border-radius: 12px !important;
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+        gap: 8px;
+    }
+
+    /* ─── SUMMARY PANEL ─── */
+    .summary-panel {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .summary-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 0;
+    }
+    .summary-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: #546E7A;
+    }
+    .summary-value {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #263238;
+    }
+
+    /* ─── PROFIT BAR ─── */
+    .meter-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+    .profit-bar {
+        height: 14px;
+        border-radius: 7px;
+        background: #e0e0e0;
+        overflow: hidden;
+        display: flex;
+    }
+    .profit-bar-sales {
+        background: linear-gradient(90deg, #2e7d32, #66bb6a);
+        height: 100%;
+        transition: width 0.5s ease;
+        border-radius: 7px 0 0 7px;
+    }
+    .profit-bar-pur {
+        background: linear-gradient(90deg, #e53935, #ef9a9a);
+        height: 100%;
+        transition: width 0.5s ease;
+        border-radius: 0 7px 7px 0;
+    }
+
+    /* ─── QUICK ACCESS ─── */
+    .quick-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .quick-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 16px 8px;
+        border-radius: 14px;
+        cursor: pointer;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: white;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+        transition: transform 0.18s, box-shadow 0.18s;
+        text-align: center;
+        user-select: none;
+    }
+    .quick-item:hover {
+        transform: translateY(-3px) scale(1.03);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.22);
+    }
+    .quick-item:active { transform: scale(0.97); }
+
+    .qi-sales     { background: linear-gradient(145deg, #1565C0, #42A5F5); }
+    .qi-purchase  { background: linear-gradient(145deg, #E65100, #FF7043); }
+    .qi-items     { background: linear-gradient(145deg, #00695C, #26A69A); }
+    .qi-stock     { background: linear-gradient(145deg, #4527A0, #7E57C2); }
+    .qi-opening   { background: linear-gradient(145deg, #2E7D32, #66BB6A); }
+    .qi-customer  { background: linear-gradient(145deg, #0277BD, #29B6F6); }
+    .qi-supplier  { background: linear-gradient(145deg, #AD1457, #F06292); }
+    .qi-category  { background: linear-gradient(145deg, #37474F, #78909C); }
+</style>
 
 @code {
-    private string factor => FormFactor.GetFormFactor();
-    private string platform => FormFactor.GetPlatform();
+    [Inject] ITabService TabService { get; set; } = default!;
+
+    // ─── Loading state ───
+    private bool _loading = true;
+
+    // ─── KPI Values ───
+    private decimal _todaySalesTotal = 0;
+    private int _todaySalesCount = 0;
+    private decimal _todayPurchasesTotal = 0;
+    private int _todayPurchasesCount = 0;
+    private decimal _monthSalesTotal = 0;
+    private int _monthSalesCount = 0;
+    private decimal _monthPurchasesTotal = 0;
+    private int _monthPurchasesCount = 0;
+    private int _totalItems = 0;
+    private decimal _grossProfit = 0;
+
+    // ─── Table Data ───
+    private List<ERPGODomain.Entities.SalesInvoice> _recentSales = new();
+    private List<Purchase> _recentPurchases = new();
+    private List<ItemOpeningStock> _topStockItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var today = DateTime.Today;
+            var monthStart = new DateTime(today.Year, today.Month, 1);
+            var monthEnd = today;
+
+            // Run all queries in parallel for speed
+            var salesMonthTask = SalesService.GetInvoicesAsync(new InvoiceSearchRequest
+            {
+                DateFrom = monthStart,
+                DateTo = monthEnd.AddDays(1),
+                Page = 1,
+                PageSize = 200
+            });
+
+            var purchasesMonthTask = PurchaseService.GetPurchasesAsync(new PurchaseSearchRequest
+            {
+                DateFrom = monthStart,
+                DateTo = monthEnd.AddDays(1),
+                Page = 1,
+                PageSize = 200
+            });
+
+            var itemsTask = ItemService.GetAllItemsAsync();
+            var stockTask = StockService.GetItemOpeningStocks();
+
+            await Task.WhenAll(salesMonthTask, purchasesMonthTask, itemsTask, stockTask);
+
+            // ─ Sales KPIs ─
+            var monthlySales = salesMonthTask.Result?.Items ?? new List<ERPGODomain.Entities.SalesInvoice>();
+            _monthSalesTotal = monthlySales.Sum(x => x.TotalAmount);
+            _monthSalesCount = monthlySales.Count;
+
+            var todaySales = monthlySales.Where(x => x.Date.Date == today).ToList();
+            _todaySalesTotal = todaySales.Sum(x => x.TotalAmount);
+            _todaySalesCount = todaySales.Count;
+
+            _recentSales = monthlySales
+                .OrderByDescending(x => x.Date)
+                .Take(5)
+                .ToList();
+
+            // ─ Purchase KPIs ─
+            var monthlyPurchases = purchasesMonthTask.Result?.Items ?? new List<Purchase>();
+            _monthPurchasesTotal = monthlyPurchases.Sum(x => x.TotalAmount);
+            _monthPurchasesCount = monthlyPurchases.Count;
+
+            var todayPurchases = monthlyPurchases.Where(x => x.Date.Date == today).ToList();
+            _todayPurchasesTotal = todayPurchases.Sum(x => x.TotalAmount);
+            _todayPurchasesCount = todayPurchases.Count;
+
+            _recentPurchases = monthlyPurchases
+                .OrderByDescending(x => x.Date)
+                .Take(5)
+                .ToList();
+
+            // ─ Gross Profit ─
+            _grossProfit = _monthSalesTotal - _monthPurchasesTotal;
+
+            // ─ Items ─
+            _totalItems = itemsTask.Result?.Count ?? 0;
+
+            // ─ Stock Snapshot ─
+            _topStockItems = (stockTask.Result ?? new List<ItemOpeningStock>())
+                .OrderByDescending(x => x.TotalValue)
+                .Take(6)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Dashboard load error: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenTab(string title, Type componentType)
+    {
+        TabService.AddTab(title, builder =>
+        {
+            builder.OpenComponent(0, componentType);
+            builder.CloseComponent();
+        });
+    }
 }

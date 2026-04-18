@@ -18,4 +18,5 @@ public class UnitApiService : IUnitService
     public Task<Unit> AddUnitAsync(Unit unit) => _apiClient.AddUnitAsync(unit);
     public Task<Unit> UpdateUnitAsync(Unit unit) => _apiClient.UpdateUnitAsync(unit);
     public Task DeleteUnitAsync(int id) => _apiClient.DeleteUnitAsync(id);
+    public Task<List<Unit>> GetAllUnitsIncludeInactiveAsync() => _apiClient.GetAllUnitsIncludeInactiveAsync();
 }

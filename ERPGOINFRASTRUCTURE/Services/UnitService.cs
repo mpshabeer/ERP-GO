@@ -18,7 +18,15 @@ public class UnitService : IUnitService
     public async Task<List<Unit>> GetAllUnitsAsync()
     {
         using var context = await _contextFactory.CreateDbContextAsync();
-        return await context.Units.Where(u => u.IsActive).ToListAsync();
+        //return await context.Units.Where(u => u.IsActive).ToListAsync();
+        return await context.Units.OrderByDescending(u=>u.IsActive).ToListAsync();
+
+    }
+
+    public async Task<List<Unit>> GetAllUnitsIncludeInactiveAsync()
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.Units.ToListAsync();
     }
 
     public async Task<Unit?> GetUnitByIdAsync(int id)

@@ -4,6 +4,12 @@
 @inject IDialogService DialogService
 @using ERPGoEdition.Shared.Pages
 @using ERPGoEdition.Shared.Dialogs
+@using Microsoft.AspNetCore.Components.Authorization
+@using Blazored.LocalStorage
+
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ILocalStorageService LocalStorage
+@inject NavigationManager Navigation
 
 <MudThemeProvider />
 <MudPopoverProvider />
@@ -19,7 +25,23 @@
                        Color="Color.Inherit" 
                        OnClick="ToggleFullscreen"
                        Title="@(isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen")" />
-        <MudIconButton Icon="@Icons.Material.Filled.Person" Color="Color.Inherit" />
+        <MudMenu Direction="Direction.Left" OffsetX="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+            <ActivatorContent>
+                <MudAvatar Color="Color.Secondary" Variant="Variant.Filled">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" />
+                </MudAvatar>
+            </ActivatorContent>
+            <ChildContent>
+                <div class="pa-4 d-flex flex-column align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Style="font-size: 64px;" Color="Color.Primary" Class="mb-2" />
+                    <MudText Typo="Typo.body1" Style="font-weight: 600;">@UserName</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4">@UserRole</MudText>
+                    <MudDivider Class="mb-2" />
+                    <MudButton StartIcon="@Icons.Material.Filled.Settings" FullWidth="true" OnClick="@OpenUserSettingsTab">User Settings</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.Logout" Color="Color.Error" FullWidth="true" Class="mt-1" OnClick="@Logout">Sign Out</MudButton>
+                </div>
+            </ChildContent>
+        </MudMenu>
     </MudAppBar>
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true">
         <NavMenu />
@@ -69,6 +91,34 @@
     bool _drawerOpen = true;
     bool isFullscreen = false;
     private DotNetObjectReference<MainLayout>? _objRef;
+    
+    // Auth State
+    string UserName = "User";
+    string UserRole = "Guest";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            UserName = user.Identity.Name ?? "User";
+            UserRole = user.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value ?? "User";
+        }
+        
+        TabService.OnChange += HandleTabChange;
+        if (!TabService.Tabs.Any())
+        {
+             // Add dashboard but don't force a StateHasChanged yet as we are initializing
+            TabService.AddTab("Dashboard", builder =>
+            {
+                builder.OpenComponent(0, typeof(Home));
+                builder.CloseComponent();
+            }, isClosable: false);
+        }
+        UpdateActiveIndexFromService();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -130,20 +180,23 @@
             }
         }
     }
-
-    protected override void OnInitialized()
+    
+    void OpenUserSettingsTab()
     {
-        TabService.OnChange += HandleTabChange;
-        if (!TabService.Tabs.Any())
+        TabService.AddTab("User Settings", builder => {
+            builder.OpenComponent(0, typeof(UserSettings));
+            builder.CloseComponent();
+        });
+    }
+
+    async Task Logout()
+    {
+        await LocalStorage.RemoveItemAsync("authToken");
+        if (AuthStateProvider is CustomAuthStateProvider customAuth)
         {
-             // Add dashboard but don't force a StateHasChanged yet as we are initializing
-            TabService.AddTab("Dashboard", builder =>
-            {
-                builder.OpenComponent(0, typeof(Home));
-                builder.CloseComponent();
-            }, isClosable: false);
+            customAuth.MarkUserAsLoggedOut();
         }
-        UpdateActiveIndexFromService();
+        Navigation.NavigateTo("/login", true);
     }
     
     public void Dispose()
