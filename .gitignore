@@ -10,3 +10,5 @@ x86/
 build/
 .gradle/
 local.properties
+/ERPGoEdition DB/ERPGoEdition DB.jfm
+/ERPGoEdition DB/ERPGoEdition DB.dbmdl
