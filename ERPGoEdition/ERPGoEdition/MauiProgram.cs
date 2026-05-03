@@ -7,7 +7,9 @@ using ERPGoEdition.Services;
 using ERPGOINFRASTRUCTURE.Services;
 using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
-
+using Blazored.LocalStorage;
+using Microsoft.AspNetCore.Components.Authorization;
+using QuestPDF.Infrastructure;
 
 namespace ERPGoEdition
 {
@@ -18,6 +20,8 @@ namespace ERPGoEdition
             var builder = MauiApp.CreateBuilder();
             builder
                 .UseMauiApp<App>()
+
+
                 .ConfigureFonts(fonts =>
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -32,14 +36,52 @@ namespace ERPGoEdition
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddMudServices();
 
-            // Auth Configuration
-            // FORCE DIRECT MODE for debugging/consistency
-            bool useApi = false; // Preferences.Get("UseApi", true); 
+            builder.Services.AddBlazoredLocalStorage();
+            builder.Services.AddAuthorizationCore();
+            builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
+
+#if WINDOWS || MACCATALYST
+            QuestPDF.Settings.License = LicenseType.Community;
+            builder.Services.AddScoped<IInvoicePdfService, InvoicePdfService>();
+            builder.Services.AddScoped<IPurchasePdfService, PurchasePdfService>();
+            builder.Services.AddScoped<IStockReportPdfService, StockReportPdfService>();
+            builder.Services.AddScoped<IReportPdfService, ReportPdfService>();
+#else
+            // QuestPDF native generation is not supported on Android/iOS.
+            
+            string pdfApiUrl = "https://localhost:7205";
+#if ANDROID
+            pdfApiUrl = "http://10.0.2.2:5209"; // Emulator loopback for local API
+#elif IOS
+            pdfApiUrl = "http://localhost:5209"; // iOS simulator
+#endif
+            
+            builder.Services.AddHttpClient<ERPGoEdition.Services.RemotePdfService>(c =>
+            {
+                c.BaseAddress = new Uri(pdfApiUrl);
+            });
+            builder.Services.AddScoped<IInvoicePdfService>(sp => sp.GetRequiredService<ERPGoEdition.Services.RemotePdfService>());
+            builder.Services.AddScoped<IPurchasePdfService>(sp => sp.GetRequiredService<ERPGoEdition.Services.RemotePdfService>());
+            builder.Services.AddScoped<IStockReportPdfService>(sp => sp.GetRequiredService<ERPGoEdition.Services.RemotePdfService>());
+            builder.Services.AddScoped<IReportPdfService>(sp => sp.GetRequiredService<ERPGoEdition.Services.RemotePdfService>());
+#endif
+
+            // Auth & API Configuration
+#if WINDOWS || MACCATALYST
+            bool useApi = false; // Desktop typically uses Direct DB Connection
+#else
+            bool useApi = true;  // Mobile MUST use the API backend
+#endif
 
             if (useApi)
             {
-                // API Mode - Use localhost for testing, change IP for device
-                builder.Services.AddApiClientServices(new Uri("https://localhost:7205"));
+                string apiBaseUrl = "https://localhost:7205";
+#if ANDROID
+                apiBaseUrl = "http://10.0.2.2:5209"; // Android emulator local API bypass
+#elif IOS
+                apiBaseUrl = "http://localhost:5209"; 
+#endif
+                builder.Services.AddApiClientServices(new Uri(apiBaseUrl));
             }
             else
             {

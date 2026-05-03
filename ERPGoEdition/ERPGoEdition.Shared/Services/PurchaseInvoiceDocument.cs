@@ -4,7 +4,7 @@ using QuestPDF.Infrastructure;
 using ERPGODomain.Entities;
 using ERPGOAPPLICATION.Interfaces;
 
-namespace ERPGoEdition.Web.Services;
+namespace ERPGoEdition.Shared.Services;
 
 public class PurchaseInvoiceDocument : IDocument
 {

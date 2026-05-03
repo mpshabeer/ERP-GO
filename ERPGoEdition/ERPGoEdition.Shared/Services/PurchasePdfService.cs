@@ -4,7 +4,7 @@ using ERPGODomain.DTOs;
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 
-namespace ERPGoEdition.Web.Services;
+namespace ERPGoEdition.Shared.Services;
 
 public class PurchasePdfService : IPurchasePdfService
 {

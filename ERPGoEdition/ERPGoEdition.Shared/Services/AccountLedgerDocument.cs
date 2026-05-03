@@ -4,7 +4,7 @@ using QuestPDF.Infrastructure;
 using ERPGODomain.DTOs;
 using ERPGOAPPLICATION.Interfaces;
 
-namespace ERPGoEdition.Web.Services;
+namespace ERPGoEdition.Shared.Services;
 
 public class AccountLedgerDocument : IDocument
 {

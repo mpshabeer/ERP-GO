@@ -9,110 +9,208 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-2" Style="height: calc(100vh - 80px); overflow: hidden;">
-    <MudGrid Spacing="2" Class="h-100">
-        <!-- LEFT SIDEBAR: LIST -->
-        <MudItem xs="12" md="3" Class="d-flex flex-column h-100 pr-2" Style="border-right: 1px solid #e0e0e0;">
-            <!-- Toolbar -->
-             <MudPaper Elevation="0" Class="pa-2 mb-2 d-flex align-center gap-2">
-                 <MudTextField @bind-Value="searchString" Placeholder="Search..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyUp="FilterCategories" FullWidth="true"/>
-                 <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadData" Size="Size.Small"/>
-             </MudPaper>
-            
-            <MudPaper Elevation="0" Class="flex-grow-1 overflow-auto">
-                <MudList T="Category" Clickable="true" SelectedValue="selectedCategory" SelectedValueChanged="OnCategorySelected" Dense="true" DisablePadding="true">
-                    @foreach (var cat in FilteredCategories)
-                    {
-                        <MudListItem Value="@cat" Class="py-2 border-bottom">
-                            <div class="d-flex justify-space-between align-center">
-                                <div>
-                                    <MudText Typo="Typo.subtitle2">@cat.Name</MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@cat.Code</MudText>
-                                </div>
-                                <div>
-                                    @if (!cat.IsActive)
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" Class="mt-1" Style="font-size: 8px; height: 16px;">Inactive</MudChip>
-                                    }
-                                </div>
-                            </div>
-                        </MudListItem>
-                    }
-                    @if (!FilteredCategories.Any())
-                    {
-                         <MudText Typo="Typo.caption" Class="pa-4 d-block text-center">No categories found.</MudText>
-                    }
-                </MudList>
-            </MudPaper>
-        </MudItem>
+<PageTitle>Category Master - ERP Go</PageTitle>
 
-        <!-- RIGHT MAIN CONTENT: FORM -->
-        <MudItem xs="12" md="9" Class="h-100 d-flex flex-column">
-            <!-- Action Bar -->
-            <MudPaper Elevation="1" Class="pa-2 mb-3 d-flex align-center gap-2 rounded-lg">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateNewCategory">New Category</MudButton>
-                <MudSpacer />
-                @if (currentCategory.Id > 0)
-                {
-                     @if(currentCategory.IsActive)
+<div class="page-wrapper">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight:700; color:#1565C0;">Category Master</MudText>
+            <MudText Typo="Typo.caption" Style="color:#78909C;">Manage item categories and defaults</MudText>
+        </div>
+        <div class="d-flex gap-2">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Size="Size.Small"
+                           OnClick="LoadData" Disabled="_isProcessing" Color="Color.Primary" Title="Refresh" />
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="main-grid">
+        
+        <!-- Left Pane: Data Entry -->
+        <MudCard Elevation="3" Class="entry-card">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Primary" Size="Size.Medium">
+                        <MudIcon Icon="@(currentCategory.Id == 0 ? Icons.Material.Filled.Add : Icons.Material.Filled.Edit)" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:700;">@(currentCategory.Id == 0 ? "New Category" : "Edit Category")</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudDivider />
+            <MudCardContent>
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudTextField T="string" @ref="_codeField"
+                                  Label="Category Code" @bind-Value="currentCategory.Code" 
+                                  Required="true" RequiredError="Code is required." 
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                  OnKeyDown="@(e => HandleKeyDown(e, _nameField))" />
+                                  
+                    <MudTextField T="string" @ref="_nameField" Class="mt-4"
+                                  Label="Category Name" @bind-Value="currentCategory.Name" 
+                                  Required="true" RequiredError="Name is required." 
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                  OnKeyDown="HandleNameKeyDown" />
+                                  
+                    <MudSelect T="int?" @ref="_unitField" Class="mt-4"
+                               Label="Default Unit (Optional)" @bind-Value="currentCategory.DefaultUnitId" 
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" 
+                               HelperText="Auto-selects this unit in Item Master">
+                        @foreach (var unit in Units)
+                        {
+                            <MudSelectItem T="int?" Value="@unit.Id">@unit.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                                     
+                    <MudCheckBox T="bool" Class="mt-3" Label="Active" @bind-Value="currentCategory.IsActive" Color="Color.Primary" />
+                </MudForm>
+            </MudCardContent>
+            <MudDivider />
+            <MudCardActions Class="pa-4 d-flex justify-end gap-2">
+                 <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ResetAsync" Disabled="@_isProcessing">Clear</MudButton>
+                 <MudButton @ref="_saveButton" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await SaveCategory())" Disabled="@_isProcessing">
+                     @if (_isProcessing)
                      {
-                        <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="@(() => DeleteCategory(currentCategory.Id))">Deactivate</MudButton>
+                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                         <MudText Class="ms-2">Wait</MudText>
                      }
                      else
                      {
-                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Restore" OnClick="@(() => RestoreCategory(currentCategory))">Restore</MudButton>
+                         <MudText>@(currentCategory.Id == 0 ? "Save Category" : "Update Category")</MudText>
                      }
-                }
-                <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveCategory" Disabled="@_isProcessing">
-                    @if (_isProcessing) { <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/> <span class="ml-2">Saving...</span> } else { <span>Save Changes</span> }
-                </MudButton>
-            </MudPaper>
+                 </MudButton>
+            </MudCardActions>
+        </MudCard>
 
-            <!-- Form Content -->
-            <MudPaper Elevation="2" Class="flex-grow-1 pa-4 overflow-auto rounded-lg">
-                <MudForm @ref="form" @bind-IsValid="@success">
-                    <MudGrid>
-                        <MudItem xs="8">
-                            <MudTextField T="string" Label="Category Name" @bind-Value="currentCategory.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" Style="font-size: 1.2rem; font-weight: 500;" />
-                        </MudItem>
-                         <MudItem xs="4">
-                            <MudTextField T="string" Label="Category Code" @bind-Value="currentCategory.Code" Required="true" RequiredError="Code is required." Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Manual Entry" />
-                        </MudItem>
-                        <MudItem xs="12">
-                             <MudCheckBox T="bool" Label="Active" @bind-Value="currentCategory.IsActive" Color="Color.Success" />
-                        </MudItem>
-                        <MudItem xs="12">
-                             <MudSelect T="int?" Label="Default Unit (Optional)" @bind-Value="currentCategory.DefaultUnitId" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" HelperText="Auto-selects this unit in Item Master">
-                                @foreach (var unit in Units)
+        <!-- Right Pane: Data List -->
+        <MudCard Elevation="3" Class="list-card">
+            <MudCardHeader>
+                 <CardHeaderContent>
+                     <MudText Typo="Typo.subtitle1" Style="font-weight:700;">Categories List</MudText>
+                 </CardHeaderContent>
+                 <CardHeaderActions>
+                    <MudTextField @bind-Value="searchString" Placeholder="Search categories..." Adornment="Adornment.Start" 
+                                  AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" 
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Style="width:200px; margin-top:-8px;"></MudTextField>
+                 </CardHeaderActions>
+            </MudCardHeader>
+            <MudDivider />
+            <MudCardContent Class="pa-0">
+                <MudTable Items="@Categories" Hover="true" Dense="true" Elevation="0" 
+                          Filter="new Func<Category, bool>(FilterFunc)" OnRowClick="@(args => EditCategory(args.Item))" T="Category" >
+                    <HeaderContent>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Code</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Name</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa; text-align:center;">Status</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa; width:60px;"></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Code">
+                            <MudText Typo="Typo.body2" Style="font-weight:600; color:#1565C0;">@context.Code</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Name">
+                            <MudText Typo="Typo.body2">@context.Name</MudText>
+                            @if(context.DefaultUnitId.HasValue)
+                            {
+                                var defaultUnitName = Units.FirstOrDefault(u => u.Id == context.DefaultUnitId.Value)?.Name;
+                                if (!string.IsNullOrEmpty(defaultUnitName))
                                 {
-                                    <MudSelectItem T="int?" Value="@unit.Id">@unit.Name</MudSelectItem>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Def. Unit: @defaultUnitName</MudText>
                                 }
-                            </MudSelect>
-                        </MudItem>
-                    </MudGrid>
-                </MudForm>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
-</MudContainer>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Status" Style="text-align:center;">
+                            @if(context.IsActive)
+                            {
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">Active</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Text">Inactive</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => DeleteCategory(context.Id))" Size="Size.Small" Color="Color.Error" Variant="Variant.Text" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </div>
+</div>
+
+<style>
+    .page-wrapper {
+        padding: 12px 16px;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: #f0f4f8;
+        min-height: calc(100vh - 80px);
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        background: white;
+        border-radius: 12px;
+        padding: 14px 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .main-grid {
+        display: grid;
+        grid-template-columns: 350px 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+
+    /* Stack on smaller screens */
+    @@media (max-width: 960px) {
+        .main-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .entry-card, .list-card {
+        border-radius: 12px !important;
+        overflow: hidden;
+    }
+</style>
 
 @code {
     private List<Category> Categories = new List<Category>();
     private List<Unit> Units = new List<Unit>();
-    private List<Category> FilteredCategories = new List<Category>();
     
     private Category currentCategory = new Category { IsActive = true };
-    private Category selectedCategory;
-    
     private string searchString = "";
     private bool success;
     private MudForm form;
     private bool _isProcessing = false;
 
+    // References for keyboard navigation
+    private MudTextField<string> _codeField;
+    private MudTextField<string> _nameField;
+    private MudSelect<int?> _unitField;
+    private MudButton _saveButton;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadData();
-        await CreateNewCategory();
+        currentCategory.IsActive = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _codeField != null)
+        {
+            await _codeField.FocusAsync();
+        }
     }
 
     private async Task LoadData()
@@ -123,7 +221,6 @@
         }
         catch (Exception ex)
         {
-             Console.WriteLine($"Error loading categories: {ex.Message}");
              Categories = new List<Category>();
              Snackbar.Add("Warning: Could not load categories. Please check database connection.", Severity.Warning);
         }
@@ -132,64 +229,45 @@
         {
             Units = await UnitService.GetAllUnitsAsync();
         }
-        catch (Exception ex)
+        catch 
         {
-             Console.WriteLine($"Error loading units: {ex.Message}");
              Units = new List<Unit>();
         }
-        
-        FilterCategories();
-    }
-    
-    private void FilterCategories()
-    {
-        if (string.IsNullOrWhiteSpace(searchString))
-        {
-            FilteredCategories = Categories.OrderBy(c => c.Name).ToList();
-        }
-        else
-        {
-            FilteredCategories = Categories.Where(c => 
-                (c.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (c.Code?.Contains(searchString, StringComparison.OrdinalIgnoreCase) ?? false)
-            ).OrderBy(c => c.Name).ToList();
-        }
-        StateHasChanged();
     }
 
-    private async Task OnCategorySelected(Category category)
+    // Keyboard sequence logic to flow downwards
+    private async Task HandleKeyDown(KeyboardEventArgs e, object nextControl)
     {
-        if (category != null)
+        if (e.Key == "Enter" || e.Key == "NumpadEnter")
         {
-            selectedCategory = category;
-            await EditCategory(category);
+            if (nextControl is MudTextField<string> txt)
+                await txt.FocusAsync();
         }
     }
 
-    private async Task CreateNewCategory()
+    // MudSelect doesn't explicitly expose FocusAsync without a runtime cast sometimes, 
+    // so we bounce from Name directly to Save if needed, or just let them tab to Select.
+    private async Task HandleNameKeyDown(KeyboardEventArgs e)
     {
-        selectedCategory = null; 
-        currentCategory = new Category { IsActive = true };
-        form?.ResetValidation();
-    }
-
-    private async Task EditCategory(Category category)
-    {
-        currentCategory = new Category 
-        { 
-            Id = category.Id, 
-            Name = category.Name, 
-            Code = category.Code,
-            DefaultUnitId = category.DefaultUnitId,
-            IsActive = category.IsActive
-        };
-        form?.ResetValidation();
+        if (e.Key == "Enter" || e.Key == "NumpadEnter")
+        {
+            if (_unitField != null)
+                await _unitField.FocusAsync();
+            else if (_saveButton != null)
+                 await _saveButton.FocusAsync();
+        }
     }
 
     private async Task SaveCategory()
     {
-        form.Validate();
-        if (!success) return;
+        if (form == null) return;
+
+        await form.Validate();
+        if (!form.IsValid) 
+        {
+             Snackbar.Add("Please fill required fields", Severity.Warning);
+             return;
+        }
 
         // Validation: Unique Name
         if (Categories.Any(c => c.Id != currentCategory.Id && c.Name.Equals(currentCategory.Name, StringComparison.OrdinalIgnoreCase)))
@@ -209,21 +287,24 @@
         }
 
         _isProcessing = true;
+        StateHasChanged();
+        await Task.Delay(1);
+
         try
         {
             if (currentCategory.Id == 0)
             {
-                var newCat = await CategoryService.AddCategoryAsync(currentCategory);
+                await CategoryService.AddCategoryAsync(currentCategory);
                 Snackbar.Add("Category saved successfully", Severity.Success);
-                await CreateNewCategory(); // Clear form
             }
             else
             {
                 await CategoryService.UpdateCategoryAsync(currentCategory);
                 Snackbar.Add("Category updated successfully", Severity.Success);
-                await CreateNewCategory(); // Clear form
             }
+            
             await LoadData();
+            await ResetAsync();
         }
         catch (Exception ex)
         {
@@ -232,30 +313,58 @@
         finally
         {
             _isProcessing = false;
+            StateHasChanged();
         }
+    }
+
+    private void EditCategory(Category category)
+    {
+        currentCategory = new Category 
+        { 
+            Id = category.Id, 
+            Name = category.Name, 
+            Code = category.Code,
+            DefaultUnitId = category.DefaultUnitId,
+            IsActive = category.IsActive
+        };
+        StateHasChanged();
+        
+        // Return focus to code field when editing starts
+        _ = _codeField.FocusAsync();
     }
 
     private async Task DeleteCategory(int id)
     {
-        bool? result = await DialogService.ShowMessageBox(
-            "Delete Category", 
-            "Are you sure you want to deactivate this category?", 
-            yesText:"Deactivate", cancelText:"Cancel");
+        await CategoryService.DeleteCategoryAsync(id);
+        await LoadData();
+        Snackbar.Add("Category inactivated", Severity.Success);
+        
+        if (currentCategory.Id == id) await ResetAsync();
+    }
 
-        if (result == true)
+    private async Task ResetAsync()
+    {
+        currentCategory = new Category { IsActive = true };
+        if (form != null)
         {
-            await CategoryService.DeleteCategoryAsync(id);
-            await LoadData();
-            await CreateNewCategory();
-            Snackbar.Add("Category deactivated", Severity.Success);
+            await form.ResetAsync();
+            form.ResetValidation();
+        }
+        StateHasChanged();
+        
+        // Always bounce focus back to start
+        if (_codeField != null)
+        {
+            await Task.Delay(50); // Small UI thread delay
+            await _codeField.FocusAsync();
         }
     }
 
-    private async Task RestoreCategory(Category category)
+    private bool FilterFunc(Category category)
     {
-        category.IsActive = true;
-        await CategoryService.UpdateCategoryAsync(category);
-        await LoadData();
-        Snackbar.Add("Category restored", Severity.Success);
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (category.Name?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (category.Code?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
     }
 }

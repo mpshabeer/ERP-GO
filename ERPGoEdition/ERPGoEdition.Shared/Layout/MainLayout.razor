@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @inject ITabService TabService
 @inject IJSRuntime JSRuntime
 @inject IDialogService DialogService
@@ -43,10 +43,11 @@
             </ChildContent>
         </MudMenu>
     </MudAppBar>
-    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true">
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="@DrawerVariant.Responsive" PreserveOpenState="true">
         <NavMenu />
     </MudDrawer>
-    <MudMainContent>
+    
+    <MudMainContent Class="mobile-main-content">
         <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
         @if (TabService.Tabs.Any())
         {
@@ -85,11 +86,32 @@
         }
         </MudContainer>
     </MudMainContent>
+    
+    <!-- Mobile Bottom Navigation -->
+    <MudHidden Breakpoint="Breakpoint.MdAndUp">
+        <MudBottomNavigation Elevation="4" Fixed="true" Style="z-index: 1000; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid #e0e0e0; background-color: #ffffff;" SelectedValue="_bottomNavValue">
+            <MudBottomNavigationItem Icon="@Icons.Material.Filled.Dashboard" Text="Home" Value="@("home")" OnClick='() => OpenBottomNavTab("Dashboard", typeof(Home))' />
+            <MudBottomNavigationItem Icon="@Icons.Material.Filled.Receipt" Text="Sales" Value="@("sales")" OnClick='() => OpenBottomNavTab("Sales Invoice", typeof(SalesInvoice))' />
+            <MudBottomNavigationItem Icon="@Icons.Material.Filled.ShoppingCart" Text="Purchases" Value="@("purchases")" OnClick='() => OpenBottomNavTab("Purchase Entry", typeof(PurchaseEntry))' />
+            <MudBottomNavigationItem Icon="@Icons.Material.Filled.Inventory2" Text="Items" Value="@("items")" OnClick='() => OpenBottomNavTab("Item Master", typeof(ItemMaster))' />
+        </MudBottomNavigation>
+    </MudHidden>
+
 </MudLayout>
+
+<style>
+    /* Prevent bottom navigation bar from overlapping content on mobile */
+    @@media (max-width: 960px) {
+        .mobile-main-content {
+            padding-bottom: 72px !important;
+        }
+    }
+</style>
 
 @code {
     bool _drawerOpen = true;
     bool isFullscreen = false;
+    private string _bottomNavValue = "home";
     private DotNetObjectReference<MainLayout>? _objRef;
     
     // Auth State
@@ -240,5 +262,19 @@
     void CloseTabById(string id)
     {
         TabService.CloseTab(id);
+    }
+
+    void OpenBottomNavTab(string title, Type componentType)
+    {
+        TabService.AddTab(title, builder => {
+            builder.OpenComponent(0, componentType);
+            builder.CloseComponent();
+        });
+        
+        // Let the system map the selected item based on user flow.
+        if (title == "Dashboard") _bottomNavValue = "home";
+        else if (title == "Sales Invoice") _bottomNavValue = "sales";
+        else if (title == "Purchase Entry") _bottomNavValue = "purchases";
+        else if (title == "Item Master") _bottomNavValue = "items";
     }
 }

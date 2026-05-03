@@ -1,75 +1,124 @@
-
 @page "/unit-master"
 @using ERPGOAPPLICATION.Interfaces
 @using ERPGODomain.Entities
 @inject IUnitService UnitService
 @inject ISnackbar Snackbar
 
-<MudText Typo="Typo.h5" GutterBottom="true">Unit Master</MudText>
+<PageTitle>Unit Master - ERP Go</PageTitle>
 
-<MudGrid>
-    <!-- Form Section -->
-    <MudItem xs="12" md="4">
-        <MudCard Elevation="25">
-             <MudCardHeader>
+<div class="page-wrapper">
+    <!-- Header -->
+    <div class="page-header">
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight:700; color:#1565C0;">Unit Master</MudText>
+            <MudText Typo="Typo.caption" Style="color:#78909C;">Manage measurement units and metadata</MudText>
+        </div>
+        <div class="d-flex gap-2">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Size="Size.Small"
+                           OnClick="LoadUnits" Disabled="_isProcessing" Color="Color.Primary" Title="Refresh" />
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="main-grid">
+        
+        <!-- Left Pane: Data Entry -->
+        <MudCard Elevation="3" Class="entry-card">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Primary" Size="Size.Medium">
+                        <MudIcon Icon="@(currentUnit.Id == 0 ? Icons.Material.Filled.Add : Icons.Material.Filled.Edit)" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
                 <CardHeaderContent>
-                    <MudText Typo="Typo.h6">@((currentUnit.Id == 0) ? "Add New Unit" : "Edit Unit")</MudText>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:700;">@(currentUnit.Id == 0 ? "New Unit" : "Edit Unit")</MudText>
                 </CardHeaderContent>
             </MudCardHeader>
+            <MudDivider />
             <MudCardContent>
                 <MudForm @ref="form" @bind-IsValid="@success">
-                    <MudTextField T="string" Label="Unit Code (Symbol)" @bind-Value="currentUnit.Code" Required="true" RequiredError="Code is required." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
-                    <MudTextField T="string" Label="Unit Name" @bind-Value="currentUnit.Name" Required="true" RequiredError="Name is required." Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-4" Immediate="true" />
-                    <MudNumericField T="int" Label="Decimal Places" @bind-Value="currentUnit.DecimalPlaces" Min="0" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-4" Immediate="true" />
-                    <MudCheckBox T="bool" Label="Active" @bind-Value="currentUnit.IsActive" Color="Color.Primary" Class="mt-2" />
+                    <MudTextField T="string" @ref="_codeField"
+                                  Label="Unit Code (Symbol)" @bind-Value="currentUnit.Code" 
+                                  Required="true" RequiredError="Code is required." 
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                  OnKeyDown="@(e => HandleKeyDown(e, _nameField))" />
+                                  
+                    <MudTextField T="string" @ref="_nameField" Class="mt-4"
+                                  Label="Unit Name" @bind-Value="currentUnit.Name" 
+                                  Required="true" RequiredError="Name is required." 
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                  OnKeyDown="@(e => HandleKeyDown(e, _decimalField))" />
+                                  
+                    <MudNumericField T="int" @ref="_decimalField" Class="mt-4"
+                                     Label="Decimal Places" @bind-Value="currentUnit.DecimalPlaces" 
+                                     Min="0" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                     OnKeyDown="HandleDecimalKeyDown" />
+                                     
+                    <MudCheckBox T="bool" @ref="_activeCheck" Class="mt-3" Label="Active" @bind-Value="currentUnit.IsActive" Color="Color.Primary" />
                 </MudForm>
             </MudCardContent>
-            <MudCardActions>
-                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await Save())" ButtonType="ButtonType.Button" Disabled="@_isProcessing" Class="ml-2">
+            <MudDivider />
+            <MudCardActions Class="pa-4 d-flex justify-end gap-2">
+                 <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ResetAsync" Disabled="@_isProcessing">Clear</MudButton>
+                 <MudButton @ref="_saveButton" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await Save())" Disabled="@_isProcessing">
                      @if (_isProcessing)
                      {
                          <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                         <MudText Class="ms-2">Processing</MudText>
+                         <MudText Class="ms-2">Wait</MudText>
                      }
                      else
                      {
-                         <MudText>@((currentUnit.Id == 0) ? "Save" : "Update")</MudText>
+                         <MudText>@(currentUnit.Id == 0 ? "Save Unit" : "Update Unit")</MudText>
                      }
                  </MudButton>
-                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="Reset" Class="ml-2">Reset</MudButton>
             </MudCardActions>
         </MudCard>
-    </MudItem>
 
-    <!-- Grid Section -->
-    <MudItem xs="12" md="8">
-        <MudCard Elevation="25">
-             <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Units List</MudText>
-                </CardHeaderContent>
+        <!-- Right Pane: Data List -->
+        <MudCard Elevation="3" Class="list-card">
+            <MudCardHeader>
+                 <CardHeaderContent>
+                     <MudText Typo="Typo.subtitle1" Style="font-weight:700;">Units List</MudText>
+                 </CardHeaderContent>
                  <CardHeaderActions>
-                    <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
+                    <MudTextField @bind-Value="searchString" Placeholder="Search units..." Adornment="Adornment.Start" 
+                                  AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" 
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Style="width:200px; margin-top:-8px;"></MudTextField>
                  </CardHeaderActions>
             </MudCardHeader>
-            <MudCardContent>
-                <MudTable Items="@Units" Hover="true" Striped="true" Bordered="true" Dense="true" Filter="new Func<Unit, bool>(FilterFunc)" OnRowClick="@(args => Edit(args.Item))" T="Unit" >
+            <MudDivider />
+            <MudCardContent Class="pa-0">
+                <MudTable Items="@Units" Hover="true" Dense="true" Elevation="0" 
+                          Filter="new Func<Unit, bool>(FilterFunc)" OnRowClick="@(args => Edit(args.Item))" T="Unit" >
                     <HeaderContent>
-                        <MudTh>Code</MudTh>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Decimals</MudTh>
-                        <MudTh>Active</MudTh>
-                        <MudTh>Actions</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Code</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa;">Name</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa; text-align:right;">Decimals</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa; text-align:center;">Status</MudTh>
+                        <MudTh Style="font-weight:600; font-size:0.75rem; color:#78909C; background:#fafafa; width:60px;"></MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Code">@context.Code</MudTd>
-                        <MudTd DataLabel="Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Decimals">@context.DecimalPlaces</MudTd>
-                        <MudTd DataLabel="Active">
-                            <MudIcon Icon="@(context.IsActive ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" />
+                        <MudTd DataLabel="Code">
+                            <MudText Typo="Typo.body2" Style="font-weight:600; color:#1565C0;">@context.Code</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Name">
+                            <MudText Typo="Typo.body2">@context.Name</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Decimals" Style="text-align:right;">
+                            <MudText Typo="Typo.body2">@context.DecimalPlaces</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Status" Style="text-align:center;">
+                            @if(context.IsActive)
+                            {
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">Active</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Text">Inactive</MudChip>
+                            }
                         </MudTd>
                         <MudTd DataLabel="Actions">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@((e) => Delete(context.Id))" Size="Size.Small" Color="Color.Error" Variant="Variant.Text" />
                         </MudTd>
                     </RowTemplate>
                     <PagerContent>
@@ -78,8 +127,47 @@
                 </MudTable>
             </MudCardContent>
         </MudCard>
-    </MudItem>
-</MudGrid>
+    </div>
+</div>
+
+<style>
+    .page-wrapper {
+        padding: 12px 16px;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: #f0f4f8;
+        min-height: calc(100vh - 80px);
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        background: white;
+        border-radius: 12px;
+        padding: 14px 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .main-grid {
+        display: grid;
+        grid-template-columns: 350px 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+
+    /* Stack on smaller screens */
+    @@media (max-width: 960px) {
+        .main-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .entry-card, .list-card {
+        border-radius: 12px !important;
+        overflow: hidden;
+    }
+</style>
 
 @code {
     private List<Unit> Units = new List<Unit>();
@@ -87,18 +175,34 @@
     private string searchString = "";
     private bool success;
     private MudForm form;
+    private bool _isProcessing = false;
+
+    // References for keyboard navigation
+    private MudTextField<string> _codeField;
+    private MudTextField<string> _nameField;
+    private MudNumericField<int> _decimalField;
+    private MudCheckBox<bool> _activeCheck;
+    private MudButton _saveButton;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
             await LoadUnits();
-            currentUnit.IsActive = true; // Default to active
+            currentUnit.IsActive = true;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error in OnInitializedAsync: {ex}");
             Snackbar.Add($"Failed to load units: {ex.Message}", Severity.Error);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _codeField != null)
+        {
+            // Set focus to the first field on load
+            await _codeField.FocusAsync();
         }
     }
 
@@ -107,20 +211,33 @@
         Units = await UnitService.GetAllUnitsAsync();
     }
 
-    private bool _isProcessing = false;
+    // Keyboard sequence logic to flow downwards
+    private async Task HandleKeyDown(KeyboardEventArgs e, object nextControl)
+    {
+        if (e.Key == "Enter" || e.Key == "NumpadEnter")
+        {
+            if (nextControl is MudTextField<string> txt)
+                await txt.FocusAsync();
+            else if (nextControl is MudNumericField<int> num)
+                await num.FocusAsync();
+        }
+    }
+
+    // Since checkbox doesn't handle enter well, we bounce to save button
+    private async Task HandleDecimalKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == "NumpadEnter")
+        {
+            if (_saveButton != null)
+                await _saveButton.FocusAsync();
+        }
+    }
 
     private async Task Save()
     {
-        Console.WriteLine("Save method called"); // Debug log
-
-        if (form == null)
-        {
-             Snackbar.Add("Form reference is missing!", Severity.Error);
-             return;
-        }
+        if (form == null) return;
 
         await form.Validate();
-        
         if (!form.IsValid) 
         {
              Snackbar.Add("Please fill required fields", Severity.Warning);
@@ -128,8 +245,8 @@
         }
 
         _isProcessing = true;
-        await Task.Delay(1); // Force UI refresh
         StateHasChanged();
+        await Task.Delay(1);
 
         try
         {
@@ -145,11 +262,10 @@
             }
             
             await LoadUnits();
-            Reset();
+            await ResetAsync();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error in Save: {ex}");
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
         finally
@@ -161,7 +277,6 @@
 
     private void Edit(Unit unit)
     {
-        // Clone to avoid modifying the list directly before saving
         currentUnit = new Unit 
         { 
             Id = unit.Id, 
@@ -170,22 +285,36 @@
             DecimalPlaces = unit.DecimalPlaces, 
             IsActive = unit.IsActive 
         };
-        StateHasChanged(); // Ensure UI updates
+        StateHasChanged();
+        
+        // Return focus to code field when editing starts
+        _ = _codeField.FocusAsync();
     }
 
     private async Task Delete(int id)
     {
         await UnitService.DeleteUnitAsync(id);
         await LoadUnits();
-        Snackbar.Add("Unit deleted", Severity.Success);
-         if (currentUnit.Id == id) Reset();
+        Snackbar.Add("Unit inactivated", Severity.Success);
+        if (currentUnit.Id == id) await ResetAsync();
     }
 
-    private void Reset()
+    private async Task ResetAsync()
     {
         currentUnit = new Unit { IsActive = true };
-        form.ResetValidation();
+        if (form != null)
+        {
+            await form.ResetAsync();
+            form.ResetValidation();
+        }
         StateHasChanged();
+        
+        // Always bounce focus back to start
+        if (_codeField != null)
+        {
+            await Task.Delay(50); // Small UI thread delay
+            await _codeField.FocusAsync();
+        }
     }
 
     private bool FilterFunc(Unit unit)

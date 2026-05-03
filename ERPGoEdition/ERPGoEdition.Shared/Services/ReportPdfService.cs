@@ -3,7 +3,7 @@ using ERPGODomain.DTOs;
 using ERPGOAPPLICATION.Interfaces;
 using ERPGoEdition.Shared.Services;
 
-namespace ERPGoEdition.Web.Services;
+namespace ERPGoEdition.Shared.Services;
 
 public class ReportPdfService : IReportPdfService
 {

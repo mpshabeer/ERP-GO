@@ -3,7 +3,7 @@ using ERPGoEdition.Shared.Services;
 using ERPGODomain.DTOs;
 using QuestPDF.Fluent;
 
-namespace ERPGoEdition.Web.Services;
+namespace ERPGoEdition.Shared.Services;
 
 public class StockReportPdfService : IStockReportPdfService
 {
